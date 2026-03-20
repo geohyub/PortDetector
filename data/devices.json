@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "settings": {
+    "ping_interval_seconds": 5,
+    "interface_poll_seconds": 3,
+    "delay_threshold_ms": 200,
+    "web_port": 5555,
+    "auto_open_browser": true
+  },
+  "devices": [
+    {
+      "id": "dev_001",
+      "name": "Localhost",
+      "ip": "127.0.0.1",
+      "ports": [
+        80,
+        443
+      ],
+      "category": "System",
+      "description": "Local machine",
+      "enabled": true
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+"""PortDetector application constants."""
+
+VERSION = "1.0.0"
+APP_NAME = "PortDetector"
+DEFAULT_WEB_PORT = 5555
+DEFAULT_PING_INTERVAL = 5  # seconds
+DEFAULT_INTERFACE_POLL_INTERVAL = 3  # seconds
+DEFAULT_DELAY_THRESHOLD_MS = 200
+DEFAULT_SCAN_TIMEOUT = 1  # seconds per port
+MAX_LOG_SIZE_BYTES = 10 * 1024 * 1024  # 10 MB
+MAX_LOG_BACKUPS = 2

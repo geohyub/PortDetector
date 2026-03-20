@@ -1,0 +1,16 @@
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+*.db
+*.sqlite3
+.env
+*.zip
+*.spec
+venv/
+.venv/
+node_modules/
+.playwright-mcp/
+

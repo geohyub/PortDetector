@@ -1,0 +1,218 @@
+/* Dashboard - Device Card Grid */
+.device-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 16px;
+}
+
+.device-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+    transition: all 0.2s;
+    cursor: default;
+    position: relative;
+}
+
+.device-card:hover {
+    background: var(--bg-card-hover);
+    border-color: var(--border-light);
+    transform: translateY(-1px);
+    box-shadow: var(--shadow);
+}
+
+.device-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+}
+
+.device-card-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.device-card-title .status-dot {
+    width: 10px;
+    height: 10px;
+}
+
+.device-card-name {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.device-card-actions {
+    display: flex;
+    gap: 4px;
+    opacity: 0;
+    transition: opacity 0.15s;
+}
+
+.device-card:hover .device-card-actions {
+    opacity: 1;
+}
+
+.device-card-actions button {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 3px;
+    font-size: 14px;
+    line-height: 1;
+}
+
+.device-card-actions button:hover {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+}
+
+.device-card-body {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.device-card-ip {
+    font-family: 'Consolas', 'Courier New', monospace;
+    font-size: 13px;
+    color: var(--accent);
+}
+
+.device-card-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.device-card-rtt {
+    font-family: 'Consolas', monospace;
+    font-size: 13px;
+}
+
+.device-card-rtt.good { color: var(--status-green); }
+.device-card-rtt.warning { color: var(--status-yellow); }
+.device-card-rtt.bad { color: var(--status-red); }
+
+.device-card-category {
+    font-size: 11px;
+    color: var(--text-muted);
+    background: var(--bg-secondary);
+    padding: 2px 8px;
+    border-radius: 10px;
+}
+
+.device-card-ports {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 4px;
+}
+
+/* Card border accent by status */
+.device-card[data-status="connected"] {
+    border-left: 3px solid var(--status-green);
+}
+
+.device-card[data-status="delayed"] {
+    border-left: 3px solid var(--status-yellow);
+}
+
+.device-card[data-status="disconnected"] {
+    border-left: 3px solid var(--status-red);
+}
+
+.device-card[data-status="unknown"] {
+    border-left: 3px solid var(--status-gray);
+}
+
+/* Scan & Settings panels */
+.scanner-panel, .interfaces-panel, .settings-panel {
+    max-width: 900px;
+}
+
+.scan-form {
+    display: flex;
+    gap: 12px;
+    align-items: flex-end;
+    flex-wrap: wrap;
+    margin-bottom: 20px;
+    padding: 16px;
+    background: var(--bg-card);
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+}
+
+.scan-form .form-group { margin-bottom: 0; }
+
+.scan-progress {
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.scan-progress .progress-bar { flex: 1; }
+
+.scan-results { margin-top: 8px; }
+
+/* Settings */
+.settings-group {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    margin-bottom: 16px;
+}
+
+.settings-group h3 {
+    font-size: 14px;
+    color: var(--text-secondary);
+    margin-bottom: 16px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.setting-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.setting-item label {
+    min-width: 200px;
+    font-size: 13px;
+    color: var(--text-primary);
+}
+
+.slider-value {
+    font-size: 13px;
+    color: var(--accent);
+    font-weight: 600;
+    min-width: 30px;
+}
+
+@media (max-width: 900px) {
+    .device-grid {
+        grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    }
+}
+
+@media (max-width: 600px) {
+    .device-grid {
+        grid-template-columns: 1fr;
+    }
+    .sidebar { width: 60px; }
+    .sidebar .logo span,
+    .sidebar .nav-item span,
+    .sidebar-footer span:last-child { display: none; }
+    .main-content { margin-left: 60px; padding: 16px; }
+}

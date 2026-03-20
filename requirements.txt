@@ -1,0 +1,7 @@
+flask>=2.0,<3.0
+flask-socketio>=5.0
+simple-websocket>=0.5
+psutil>=5.9
+pystray>=0.19
+Pillow>=9.0
+pyinstaller>=5.0

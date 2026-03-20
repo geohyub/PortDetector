@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PortDetector</title>
+    <link rel="stylesheet" href="/static/css/main.css">
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+    <link rel="stylesheet" href="/static/css/components.css">
+</head>
+<body>
+    <!-- Sidebar -->
+    <nav class="sidebar">
+        <div class="sidebar-header">
+            <div class="logo">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>
+                </svg>
+                <span>PortDetector</span>
+            </div>
+        </div>
+        <ul class="nav-menu">
+            <li class="nav-item active" data-page="dashboard">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+                    <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+                </svg>
+                <span>대시보드</span>
+            </li>
+            <li class="nav-item" data-page="scanner">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+                </svg>
+                <span>포트 스캔</span>
+            </li>
+            <li class="nav-item" data-page="discovery">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
+                </svg>
+                <span>자동 탐색</span>
+            </li>
+            <li class="nav-item" data-page="traceroute">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="22,12 18,12 15,21 9,3 6,12 2,12"/>
+                </svg>
+                <span>경로 추적</span>
+            </li>
+            <li class="nav-item" data-page="interfaces">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="1" y="4" width="22" height="16" rx="2"/><path d="M1 10h22"/>
+                </svg>
+                <span>네트워크 인터페이스</span>
+            </li>
+            <li class="nav-item" data-page="history">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="10"/>
+                </svg>
+                <span>이벤트 이력</span>
+            </li>
+            <li class="nav-item" data-page="settings">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="3"/>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.32 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                </svg>
+                <span>설정</span>
+            </li>
+        </ul>
+        <div class="sidebar-footer">
+            <div class="connection-status" id="connection-status">
+                <span class="status-dot disconnected"></span>
+                <span>연결 안됨</span>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <!-- 대시보드 -->
+        <div class="page active" id="page-dashboard">
+            <div class="page-header">
+                <h1>대시보드</h1>
+                <div class="header-actions">
+                    <span class="device-summary" id="device-summary"></span>
+                    <button class="btn btn-secondary" onclick="Dashboard.toggleGraph()">RTT 그래프</button>
+                    <button class="btn btn-secondary" onclick="Report.generate()">보고서</button>
+                    <button class="btn btn-primary" onclick="Devices.showAddModal()">+ 장비 추가</button>
+                </div>
+            </div>
+            <!-- RTT Graph Panel (hidden by default) -->
+            <div id="rtt-graph-panel" style="display:none; margin-bottom:20px">
+                <div class="panel">
+                    <div class="panel-title">실시간 RTT 추이 그래프</div>
+                    <div class="rtt-graph-container">
+                        <canvas id="rtt-graph-canvas"></canvas>
+                    </div>
+                </div>
+            </div>
+            <div class="device-grid" id="device-grid">
+                <div class="empty-state">장비를 불러오는 중...</div>
+            </div>
+        </div>
+
+        <!-- 포트 스캔 -->
+        <div class="page" id="page-scanner">
+            <div class="page-header">
+                <h1>포트 스캔</h1>
+            </div>
+            <div class="scanner-panel">
+                <div class="scan-form">
+                    <div class="form-group">
+                        <label>IP 주소</label>
+                        <input type="text" id="scan-ip" placeholder="192.168.1.1" class="input">
+                    </div>
+                    <div class="form-group">
+                        <label>포트</label>
+                        <input type="text" id="scan-ports" placeholder="80,443 또는 1-1024" value="1-1024" class="input">
+                    </div>
+                    <div class="form-group">
+                        <label>프로토콜</label>
+                        <select id="scan-protocol" class="input">
+                            <option value="tcp">TCP</option>
+                            <option value="udp">UDP</option>
+                        </select>
+                    </div>
+                    <button class="btn btn-primary" id="scan-btn" onclick="Scanner.startScan()">스캔 시작</button>
+                </div>
+                <div class="scan-progress" id="scan-progress" style="display:none">
+                    <div class="progress-bar"><div class="progress-fill" id="scan-progress-fill"></div></div>
+                    <span id="scan-progress-text">0 / 0</span>
+                </div>
+                <table class="data-table" id="scan-results-table">
+                    <thead>
+                        <tr><th>포트</th><th>상태</th><th>프로토콜</th><th>서비스</th></tr>
+                    </thead>
+                    <tbody id="scan-results-body"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- 자동 탐색 -->
+        <div class="page" id="page-discovery">
+            <div class="page-header">
+                <h1>네트워크 자동 탐색</h1>
+            </div>
+            <div class="scanner-panel">
+                <div class="scan-form">
+                    <div class="form-group">
+                        <label>서브넷 (예: 192.168.1)</label>
+                        <input type="text" id="discovery-subnet" placeholder="자동 감지" class="input">
+                    </div>
+                    <button class="btn btn-primary" id="discovery-btn" onclick="Discovery.start()">탐색 시작</button>
+                </div>
+                <div id="discovery-progress" style="display:none; margin-bottom:16px">
+                    <div class="progress-bar"><div class="progress-fill" id="discovery-progress-fill"></div></div>
+                    <span id="discovery-progress-text" style="font-size:13px;color:var(--text-secondary)"></span>
+                </div>
+                <table class="data-table">
+                    <thead>
+                        <tr><th>IP 주소</th><th>호스트명</th><th>응답 시간</th><th>동작</th></tr>
+                    </thead>
+                    <tbody id="discovery-results-body"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- 경로 추적 -->
+        <div class="page" id="page-traceroute">
+            <div class="page-header">
+                <h1>경로 추적 (Traceroute)</h1>
+            </div>
+            <div class="scanner-panel">
+                <div class="scan-form">
+                    <div class="form-group">
+                        <label>대상 IP</label>
+                        <input type="text" id="traceroute-ip" placeholder="192.168.1.1" class="input">
+                    </div>
+                    <button class="btn btn-primary" id="traceroute-btn" onclick="Traceroute.start()">추적 시작</button>
+                </div>
+                <div id="traceroute-status" style="display:none;margin-bottom:12px;font-size:13px;color:var(--text-secondary)"></div>
+                <div id="traceroute-results"></div>
+            </div>
+        </div>
+
+        <!-- 네트워크 인터페이스 -->
+        <div class="page" id="page-interfaces">
+            <div class="page-header">
+                <h1>네트워크 인터페이스</h1>
+            </div>
+            <table class="data-table" id="interfaces-table">
+                <thead>
+                    <tr>
+                        <th>어댑터</th><th>상태</th><th>속도</th>
+                        <th>IPv4</th><th>수신량</th><th>송신량</th>
+                        <th>수신 속도</th><th>송신 속도</th>
+                    </tr>
+                </thead>
+                <tbody id="interfaces-body"></tbody>
+            </table>
+
+            <!-- 장비별 트래픽 -->
+            <div id="device-traffic-section" style="margin-top:24px">
+                <h2 style="font-size:18px;font-weight:700;margin-bottom:16px">장비별 트래픽</h2>
+                <div id="device-traffic-notice" style="font-size:13px;color:var(--text-muted);margin-bottom:12px"></div>
+                <table class="data-table" id="device-traffic-table" style="display:none">
+                    <thead>
+                        <tr>
+                            <th>장비 IP</th><th>수신 속도</th><th>송신 속도</th>
+                            <th>총 수신</th><th>총 송신</th><th>패킷 수신</th><th>패킷 송신</th>
+                        </tr>
+                    </thead>
+                    <tbody id="device-traffic-body"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- 이벤트 이력 -->
+        <div class="page" id="page-history">
+            <div class="page-header">
+                <h1>이벤트 이력</h1>
+                <div class="header-actions">
+                    <select id="history-filter" class="input" onchange="History.loadHistory()">
+                        <option value="">전체 장비</option>
+                    </select>
+                    <button class="btn btn-secondary" onclick="History.exportCSV()">CSV 내보내기</button>
+                </div>
+            </div>
+            <table class="data-table">
+                <thead>
+                    <tr><th>시각</th><th>장비</th><th>IP</th><th>이벤트</th><th>RTT</th></tr>
+                </thead>
+                <tbody id="history-body"></tbody>
+            </table>
+        </div>
+
+        <!-- 설정 -->
+        <div class="page" id="page-settings">
+            <div class="page-header">
+                <h1>설정</h1>
+            </div>
+            <div class="settings-panel">
+                <div class="settings-group">
+                    <h3>모니터링</h3>
+                    <div class="setting-item">
+                        <label>Ping 주기 (초)</label>
+                        <input type="range" id="setting-ping-interval" min="1" max="30" value="5" class="slider"
+                               oninput="this.nextElementSibling.textContent=this.value+'초'">
+                        <span class="slider-value">5초</span>
+                    </div>
+                    <div class="setting-item">
+                        <label>인터페이스 갱신 주기 (초)</label>
+                        <input type="range" id="setting-iface-interval" min="1" max="10" value="3" class="slider"
+                               oninput="this.nextElementSibling.textContent=this.value+'초'">
+                        <span class="slider-value">3초</span>
+                    </div>
+                    <div class="setting-item">
+                        <label>지연 판정 기준 (ms)</label>
+                        <input type="number" id="setting-delay-threshold" value="200" min="50" max="5000" class="input input-sm">
+                    </div>
+                </div>
+                <div class="settings-group">
+                    <h3>알림음</h3>
+                    <div class="setting-item">
+                        <label>장비 연결 끊김 시 알림</label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="setting-alert-enabled" checked>
+                            사용
+                        </label>
+                    </div>
+                    <div class="setting-item">
+                        <label>알림 볼륨</label>
+                        <input type="range" id="setting-alert-volume" min="0" max="100" value="50" class="slider"
+                               oninput="this.nextElementSibling.textContent=this.value+'%'">
+                        <span class="slider-value">50%</span>
+                        <button class="btn btn-sm btn-secondary" onclick="AlertSound.testSound()">테스트</button>
+                    </div>
+                </div>
+                <div class="settings-group">
+                    <h3>설정 파일</h3>
+                    <div class="setting-item">
+                        <button class="btn btn-secondary" onclick="Settings.exportConfig()">설정 내보내기</button>
+                        <button class="btn btn-secondary" onclick="Settings.importConfig()">설정 가져오기</button>
+                        <input type="file" id="config-file-input" accept=".json" style="display:none"
+                               onchange="Settings.handleImport(event)">
+                    </div>
+                </div>
+                <button class="btn btn-primary" onclick="Settings.saveSettings()">설정 저장</button>
+            </div>
+        </div>
+    </main>
+
+    <!-- 장비 추가/편집 모달 -->
+    <div class="modal-overlay" id="device-modal" style="display:none">
+        <div class="modal">
+            <div class="modal-header">
+                <h2 id="modal-title">장비 추가</h2>
+                <button class="modal-close" onclick="Devices.closeModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="device-edit-id">
+                <div class="form-group">
+                    <label>장비 이름 *</label>
+                    <input type="text" id="device-name" class="input" placeholder="메인 라우터">
+                </div>
+                <div class="form-group">
+                    <label>IP 주소 *</label>
+                    <input type="text" id="device-ip" class="input" placeholder="192.168.1.1">
+                </div>
+                <div class="form-group">
+                    <label>포트 (쉼표 구분)</label>
+                    <input type="text" id="device-ports" class="input" placeholder="80,443,22">
+                </div>
+                <div class="form-group">
+                    <label>그룹 (위치/카테고리)</label>
+                    <input type="text" id="device-category" class="input" placeholder="브릿지, 엔진룸, 갑판 등">
+                </div>
+                <div class="form-group">
+                    <label>설명</label>
+                    <input type="text" id="device-description" class="input" placeholder="장비 설명">
+                </div>
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="device-enabled" checked>
+                        모니터링 활성화
+                    </label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="Devices.closeModal()">취소</button>
+                <button class="btn btn-primary" onclick="Devices.saveDevice()">저장</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 보고서 모달 -->
+    <div class="modal-overlay" id="report-modal" style="display:none">
+        <div class="modal" style="width:700px;max-height:80vh;overflow-y:auto">
+            <div class="modal-header">
+                <h2>네트워크 상태 보고서</h2>
+                <button class="modal-close" onclick="Report.close()">&times;</button>
+            </div>
+            <div class="modal-body" id="report-content"></div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="Report.downloadHTML()">HTML 저장</button>
+                <button class="btn btn-primary" onclick="Report.close()">닫기</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div class="toast-container" id="toast-container"></div>
+
+    <!-- Scripts -->
+    <script src="/static/lib/socket.io.min.js"></script>
+    <script src="/static/js/utils.js"></script>
+    <script src="/static/js/alert.js"></script>
+    <script src="/static/js/app.js"></script>
+    <script src="/static/js/dashboard.js"></script>
+    <script src="/static/js/devices.js"></script>
+    <script src="/static/js/scanner.js"></script>
+    <script src="/static/js/discovery.js"></script>
+    <script src="/static/js/traceroute.js"></script>
+    <script src="/static/js/interfaces.js"></script>
+    <script src="/static/js/history.js"></script>
+    <script src="/static/js/settings.js"></script>
+    <script src="/static/js/report.js"></script>
+    <script src="/static/js/graph.js"></script>
+</body>
+</html>
