@@ -70,6 +70,7 @@
                 <span class="status-dot disconnected"></span>
                 <span>연결 안됨</span>
             </div>
+            <div style="font-size:10px;color:var(--text-muted);margin-top:8px">v{{ version }}</div>
         </div>
     </nav>
 
@@ -84,6 +85,37 @@
                     <button class="btn btn-secondary" onclick="Dashboard.toggleGraph()">RTT 그래프</button>
                     <button class="btn btn-secondary" onclick="Report.generate()">보고서</button>
                     <button class="btn btn-primary" onclick="Devices.showAddModal()">+ 장비 추가</button>
+                </div>
+            </div>
+            <!-- Status Summary Bar -->
+            <div class="status-summary-bar" id="status-summary-bar">
+                <div class="status-summary-item">
+                    <div>
+                        <div class="status-summary-count" id="summary-total" style="color:var(--text-primary)">0</div>
+                        <div class="status-summary-label">전체</div>
+                    </div>
+                </div>
+                <div class="status-summary-divider"></div>
+                <div class="status-summary-item">
+                    <span class="status-dot connected" style="width:8px;height:8px"></span>
+                    <div>
+                        <div class="status-summary-count" id="summary-online" style="color:var(--status-green)">0</div>
+                        <div class="status-summary-label">온라인</div>
+                    </div>
+                </div>
+                <div class="status-summary-item">
+                    <span class="status-dot delayed" style="width:8px;height:8px"></span>
+                    <div>
+                        <div class="status-summary-count" id="summary-delayed" style="color:var(--status-yellow)">0</div>
+                        <div class="status-summary-label">지연</div>
+                    </div>
+                </div>
+                <div class="status-summary-item">
+                    <span class="status-dot disconnected" style="width:8px;height:8px"></span>
+                    <div>
+                        <div class="status-summary-count" id="summary-offline" style="color:var(--status-red)">0</div>
+                        <div class="status-summary-label">오프라인</div>
+                    </div>
                 </div>
             </div>
             <!-- RTT Graph Panel (hidden by default) -->

@@ -159,20 +159,38 @@ body {
 .status-dot.connected {
     background: var(--status-green);
     box-shadow: 0 0 6px var(--status-green);
+    animation: pulse-green 2s ease-in-out infinite;
 }
 
 .status-dot.delayed {
     background: var(--status-yellow);
     box-shadow: 0 0 6px var(--status-yellow);
+    animation: pulse-yellow 1.5s ease-in-out infinite;
 }
 
 .status-dot.disconnected {
     background: var(--status-red);
     box-shadow: 0 0 6px var(--status-red);
+    animation: pulse-red 1s ease-in-out infinite;
 }
 
 .status-dot.unknown {
     background: var(--status-gray);
+}
+
+@keyframes pulse-green {
+    0%, 100% { box-shadow: 0 0 4px var(--status-green); }
+    50% { box-shadow: 0 0 10px var(--status-green), 0 0 20px rgba(0,230,118,0.2); }
+}
+
+@keyframes pulse-yellow {
+    0%, 100% { box-shadow: 0 0 4px var(--status-yellow); }
+    50% { box-shadow: 0 0 10px var(--status-yellow), 0 0 20px rgba(255,214,0,0.2); }
+}
+
+@keyframes pulse-red {
+    0%, 100% { box-shadow: 0 0 4px var(--status-red); }
+    50% { box-shadow: 0 0 12px var(--status-red), 0 0 24px rgba(255,23,68,0.3); }
 }
 
 /* Buttons */
@@ -424,6 +442,97 @@ body {
 
 .group-header:first-child {
     margin-top: 0;
+}
+
+/* Summary Status Bar */
+.status-summary-bar {
+    display: flex;
+    gap: 16px;
+    padding: 12px 16px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    margin-bottom: 20px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.status-summary-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.status-summary-count {
+    font-size: 22px;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.status-summary-label {
+    font-size: 11px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.status-summary-divider {
+    width: 1px;
+    height: 32px;
+    background: var(--border);
+}
+
+/* Uptime display */
+.device-card-uptime {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 4px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.device-card-uptime .uptime-ok { color: var(--status-green); }
+.device-card-uptime .uptime-warn { color: var(--status-yellow); }
+.device-card-uptime .uptime-bad { color: var(--status-red); }
+
+/* Mini sparkline canvas */
+.device-card-sparkline {
+    width: 100%;
+    height: 24px;
+    margin-top: 6px;
+    border-radius: 3px;
+    background: var(--bg-input);
+}
+
+/* Connection quality bar */
+.quality-bar {
+    height: 3px;
+    border-radius: 2px;
+    background: var(--border);
+    margin-top: 8px;
+    overflow: hidden;
+}
+
+.quality-bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.5s ease;
+}
+
+/* Keyboard shortcut hints */
+.kbd {
+    display: inline-block;
+    padding: 1px 5px;
+    font-size: 10px;
+    font-family: Consolas, monospace;
+    color: var(--text-muted);
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    margin-left: 6px;
 }
 
 @media (max-width: 600px) {

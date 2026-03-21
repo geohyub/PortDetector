@@ -31,6 +31,14 @@ var Utils = {
         return (bytesPerSec / Math.pow(1024, i)).toFixed(1) + ' ' + units[i];
     },
 
+    formatDuration: function(seconds) {
+        if (seconds < 60) return seconds + '초';
+        if (seconds < 3600) return Math.floor(seconds / 60) + '분';
+        var h = Math.floor(seconds / 3600);
+        var m = Math.floor((seconds % 3600) / 60);
+        return h + '시간 ' + (m > 0 ? m + '분' : '');
+    },
+
     showToast: function(message, type) {
         type = type || 'info';
         var container = document.getElementById('toast-container');
