@@ -1,0 +1,65 @@
+# MBES Survey Vessel — multibeam bathymetric survey
+name: "MBES Survey Vessel"
+vessel: "Bathymetric Survey Vessel"
+description: "Multibeam, SVP, SSS, DGNSS, MRU, full nav"
+
+devices:
+  - name: "DGNSS Primary"
+    ip: "192.168.1.10"
+    ports: [5017]
+    category: "DGNSS"
+    description: "Primary DGNSS"
+
+  - name: "DGNSS Secondary"
+    ip: "192.168.1.11"
+    ports: [5017]
+    category: "DGNSS"
+    description: "Backup DGNSS"
+
+  - name: "MRU"
+    ip: "192.168.1.20"
+    ports: [4001]
+    category: "MRU"
+    description: "Motion Reference Unit"
+
+  - name: "Gyro Compass"
+    ip: "192.168.1.30"
+    ports: [2000]
+    category: "Gyro"
+    description: "Heading sensor"
+
+  - name: "Multibeam Sonar"
+    ip: "192.168.1.41"
+    ports: [4002, 4003]
+    category: "MBES"
+    description: "Multibeam echo sounder"
+
+  - name: "SVP Probe"
+    ip: "192.168.1.42"
+    ports: [5000]
+    category: "SVP"
+    description: "Sound Velocity Profiler"
+
+  - name: "Side Scan Sonar"
+    ip: "192.168.1.45"
+    ports: [8100]
+    category: "SSS"
+    description: "Side Scan Sonar towfish"
+
+  - name: "Acquisition PC"
+    ip: "192.168.1.100"
+    ports: [80, 3389]
+    category: "Acquisition"
+    description: "MBES acquisition (CARIS/QINSy)"
+
+  - name: "Navigation PC"
+    ip: "192.168.1.101"
+    ports: [80, 3389]
+    category: "Navigation"
+    description: "Helmsman display"
+
+  - name: "NAS Storage"
+    ip: "192.168.1.200"
+    ports: [80, 443, 5000]
+    category: "Storage"
+    description: "Data storage"

@@ -1,6 +1,6 @@
 """PortDetector application constants."""
 
-VERSION = "1.1.0"
+VERSION = "2.0.0"
 APP_NAME = "PortDetector"
 DEFAULT_WEB_PORT = 5555
 DEFAULT_PING_INTERVAL = 5  # seconds

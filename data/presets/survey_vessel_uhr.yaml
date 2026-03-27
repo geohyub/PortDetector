@@ -1,0 +1,89 @@
+# UHR (Ultra-High Resolution) Survey Vessel — multi-streamer seismic
+name: "Survey Vessel (UHR Multi-Ch)"
+vessel: "UHR Multi-Channel Vessel"
+description: "Multi-channel streamer, Sparker, USBL, full nav suite"
+
+devices:
+  - name: "DGNSS Primary"
+    ip: "192.168.1.10"
+    ports: [5017, 5018]
+    category: "DGNSS"
+    description: "Primary DGNSS"
+
+  - name: "DGNSS Secondary"
+    ip: "192.168.1.11"
+    ports: [5017]
+    category: "DGNSS"
+    description: "Backup DGNSS"
+
+  - name: "MRU"
+    ip: "192.168.1.20"
+    ports: [4001]
+    category: "MRU"
+    description: "Motion Reference Unit"
+
+  - name: "Gyro Compass"
+    ip: "192.168.1.30"
+    ports: [2000]
+    category: "Gyro"
+    description: "Heading sensor"
+
+  - name: "Sparker Power Supply"
+    ip: "192.168.1.50"
+    ports: [8080]
+    category: "Sparker"
+    description: "Geo-Spark / Applied Acoustics"
+
+  - name: "Streamer Digitizer"
+    ip: "192.168.1.51"
+    ports: [8000, 8001]
+    category: "Streamer"
+    description: "Multi-channel streamer digitizer"
+
+  - name: "Streamer Controller"
+    ip: "192.168.1.52"
+    ports: [9000]
+    category: "Streamer"
+    description: "Streamer depth/feathering controller"
+
+  - name: "USBL Transceiver"
+    ip: "192.168.1.70"
+    ports: [5100]
+    category: "USBL"
+    description: "Acoustic positioning"
+
+  - name: "SBP Transceiver"
+    ip: "192.168.1.60"
+    ports: [8888]
+    category: "SBP"
+    description: "Sub-Bottom Profiler"
+
+  - name: "Echo Sounder"
+    ip: "192.168.1.40"
+    ports: [4002]
+    category: "Echo Sounder"
+    description: "Bathymetry sensor"
+
+  - name: "Acquisition Server"
+    ip: "192.168.1.100"
+    ports: [80, 3389, 8080]
+    category: "Acquisition"
+    description: "Seismic acquisition server"
+
+  - name: "QC/Processing PC"
+    ip: "192.168.1.102"
+    ports: [80, 3389]
+    category: "Processing"
+    description: "Real-time QC workstation"
+
+  - name: "NAS Primary"
+    ip: "192.168.1.200"
+    ports: [80, 443, 5000]
+    category: "Storage"
+    description: "Primary NAS"
+
+  - name: "NAS Backup"
+    ip: "192.168.1.201"
+    ports: [80, 443, 5000]
+    category: "Storage"
+    description: "Backup NAS"

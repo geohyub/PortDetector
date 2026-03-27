@@ -1,0 +1,71 @@
+# Standard Marine Survey Vessel — typical offshore geophysical setup
+name: "Survey Vessel (Standard)"
+vessel: "General Survey Vessel"
+description: "GPS, MRU, Gyro, Echo Sounder, Sparker, SBP, Navigation PC"
+
+devices:
+  - name: "DGNSS (Primary)"
+    ip: "192.168.1.10"
+    ports: [5017, 5018]
+    category: "DGNSS"
+    description: "Primary DGNSS receiver"
+
+  - name: "DGNSS (Secondary)"
+    ip: "192.168.1.11"
+    ports: [5017]
+    category: "DGNSS"
+    description: "Backup DGNSS receiver"
+
+  - name: "MRU (Motion Sensor)"
+    ip: "192.168.1.20"
+    ports: [4001]
+    category: "MRU"
+    description: "Motion Reference Unit"
+
+  - name: "Gyro Compass"
+    ip: "192.168.1.30"
+    ports: [2000]
+    category: "Gyro"
+    description: "Heading sensor"
+
+  - name: "Echo Sounder"
+    ip: "192.168.1.40"
+    ports: [4002]
+    category: "Echo Sounder"
+    description: "Single/Dual beam echo sounder"
+
+  - name: "Sparker Unit"
+    ip: "192.168.1.50"
+    ports: [8080]
+    category: "Sparker"
+    description: "Sparker seismic source"
+
+  - name: "SBP Transceiver"
+    ip: "192.168.1.60"
+    ports: [8888]
+    category: "SBP"
+    description: "Sub-Bottom Profiler transceiver"
+
+  - name: "Acquisition PC"
+    ip: "192.168.1.100"
+    ports: [80, 3389]
+    category: "Acquisition"
+    description: "Data acquisition workstation"
+
+  - name: "Navigation PC"
+    ip: "192.168.1.101"
+    ports: [80, 3389]
+    category: "Navigation"
+    description: "Navigation/Helmsman display"
+
+  - name: "Processing PC"
+    ip: "192.168.1.102"
+    ports: [80, 3389]
+    category: "Processing"
+    description: "Onboard data processing"
+
+  - name: "NAS Storage"
+    ip: "192.168.1.200"
+    ports: [80, 443, 5000]
+    category: "Storage"
+    description: "Network attached storage"

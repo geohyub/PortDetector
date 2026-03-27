@@ -28,27 +28,60 @@ class LogService:
 
     def get_history(self, limit: int = 100, offset: int = 0,
                     device_id: Optional[str] = None) -> List[dict]:
-        """Read history entries (newest first)."""
+        """Read history entries (newest first). Uses reverse file reading for efficiency."""
         if not os.path.exists(self._log_path):
             return []
 
-        with open(self._log_path, 'r', encoding='utf-8') as f:
-            lines = f.readlines()
-
+        # Read file in reverse to avoid loading entire file for paginated queries
         entries = []
-        for line in reversed(lines):
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                entry = json.loads(line)
-                if device_id and entry.get('device_id') != device_id:
-                    continue
-                entries.append(entry)
-            except json.JSONDecodeError:
-                continue
+        target = offset + limit
+        skipped = 0
 
-        return entries[offset:offset + limit]
+        try:
+            with open(self._log_path, 'rb') as f:
+                f.seek(0, 2)
+                remaining = f.tell()
+                buf = b''
+                while remaining > 0 and len(entries) < target:
+                    chunk_size = min(8192, remaining)
+                    remaining -= chunk_size
+                    f.seek(remaining)
+                    buf = f.read(chunk_size) + buf
+                    lines = buf.split(b'\n')
+                    buf = lines[0]  # partial line carried over
+                    for line in reversed(lines[1:]):
+                        line = line.strip()
+                        if not line:
+                            continue
+                        try:
+                            entry = json.loads(line.decode('utf-8'))
+                            if device_id and entry.get('device_id') != device_id:
+                                continue
+                            if skipped < offset:
+                                skipped += 1
+                                continue
+                            entries.append(entry)
+                            if len(entries) >= limit:
+                                break
+                        except (json.JSONDecodeError, UnicodeDecodeError):
+                            continue
+
+                # Process remaining buffer
+                if buf.strip() and len(entries) < limit:
+                    try:
+                        entry = json.loads(buf.strip().decode('utf-8'))
+                        ok = not device_id or entry.get('device_id') == device_id
+                        if ok:
+                            if skipped < offset:
+                                pass
+                            else:
+                                entries.append(entry)
+                    except (json.JSONDecodeError, UnicodeDecodeError):
+                        pass
+        except OSError:
+            return []
+
+        return entries
 
     def get_all_entries(self) -> List[dict]:
         """Get all entries for CSV export."""
