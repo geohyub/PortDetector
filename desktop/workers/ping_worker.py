@@ -9,6 +9,7 @@ from PySide6.QtCore import QObject, QThread, Signal
 
 from backend.services.ping_service import ping
 from backend.models.status import PingResult
+from backend.utils.monitoring_presenter import build_status_reason
 
 MAX_HISTORY_PER_DEVICE = 120
 MAX_PING_WORKERS = 10
@@ -113,7 +114,17 @@ class PingWorkerThread(QThread):
                         self._prev_status[device.id] = status
                         if prev is not None:
                             self._log_service.log_event(
-                                device.id, device.ip, status, rtt_ms
+                                device.id,
+                                device.ip,
+                                status,
+                                rtt_ms,
+                                device_name=device.name,
+                                category=device.category,
+                                importance=getattr(device, 'importance', 'standard'),
+                                description=device.description,
+                                ports=list(device.ports),
+                                old_status=prev,
+                                reason=build_status_reason(status, rtt_ms, self._delay_threshold),
                             )
                             self.signals.status_change.emit({
                                 'device_id': device.id,

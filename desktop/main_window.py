@@ -1,7 +1,6 @@
 """PortDetector MainWindow — sidebar navigation + stacked panels."""
 
-import os
-import sys
+from datetime import datetime
 
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
@@ -26,6 +25,18 @@ from desktop.dialogs.device_dialog import DeviceDialog
 from desktop.workers.ping_worker import PingWorkerThread
 from desktop.workers.interface_worker import InterfaceWorkerThread
 from desktop.workers.serial_worker import SerialWorkerThread
+from backend.utils.monitoring_presenter import (
+    build_action_text,
+    build_ports_text,
+    build_status_label,
+    build_status_reason,
+    derive_runtime_severity,
+    format_relative_time,
+    importance_label,
+    importance_weight,
+    severity_label,
+    severity_rank,
+)
 
 
 NAV_ITEMS = [
@@ -43,18 +54,24 @@ NAV_ITEMS = [
 
 class MainWindow(QMainWindow):
     def __init__(self, config_service, log_service, traffic_service,
-                 profile_service, alert_service, uptime_service):
+                 profile_service, alert_service, backup_service, uptime_service):
         super().__init__()
         self._config_service = config_service
         self._log_service = log_service
         self._traffic_service = traffic_service
         self._profile_service = profile_service
         self._alert_service = alert_service
+        self._backup_service = backup_service
         self._uptime_service = uptime_service
 
         self._ping_worker = None
         self._interface_worker = None
         self._serial_worker = None
+        self._alerts_enabled = True
+        self._delay_threshold_ms = 200
+        self._device_states = {}
+        self._last_status_changes = {}
+        self._selected_device_id = None
 
         self.setWindowTitle(f"{APP_NAME} v{VERSION}")
         self.setMinimumSize(1100, 700)
@@ -67,6 +84,7 @@ class MainWindow(QMainWindow):
 
         # Initial data load
         self._refresh_devices()
+        self._update_dashboard_context()
         self._history_panel.refresh_device_filter()
         self._history_panel._refresh()
 
@@ -139,6 +157,7 @@ class MainWindow(QMainWindow):
         self._dashboard = DashboardPanel()
         self._dashboard.add_device_requested.connect(self._add_device)
         self._dashboard.device_selected.connect(self._on_device_selected)
+        self._dashboard.scan_device_requested.connect(self._open_device_in_scanner)
         self._stack.addWidget(self._dashboard)
 
         # 1: Scanner
@@ -159,6 +178,7 @@ class MainWindow(QMainWindow):
 
         # 5: Serial/NMEA
         self._serial = SerialPanel()
+        self._serial.monitored_ports_changed.connect(self._on_serial_ports_changed)
         self._stack.addWidget(self._serial)
 
         # 6: History
@@ -170,7 +190,11 @@ class MainWindow(QMainWindow):
         self._stack.addWidget(self._report)
 
         # 8: Settings
-        self._settings = SettingsPanel(self._config_service, self._profile_service)
+        self._settings = SettingsPanel(
+            self._config_service,
+            self._profile_service,
+            self._backup_service,
+        )
         self._settings.settings_changed.connect(self._on_settings_changed)
         self._settings.profile_loaded.connect(self._on_profile_loaded)
         self._settings.preset_loaded.connect(self._on_profile_loaded)
@@ -192,12 +216,13 @@ class MainWindow(QMainWindow):
 
     def _setup_workers(self):
         settings = self._config_service.get_settings()
+        self._delay_threshold_ms = settings.get('delay_threshold_ms', 200)
 
         # Ping worker
         self._ping_worker = PingWorkerThread(
             self._config_service,
             self._log_service,
-            delay_threshold_ms=settings.get('delay_threshold_ms', 200),
+            delay_threshold_ms=self._delay_threshold_ms,
         )
         self._ping_worker.signals.batch_update.connect(self._on_ping_update)
         self._ping_worker.signals.status_change.connect(self._on_status_change)
@@ -214,6 +239,7 @@ class MainWindow(QMainWindow):
         # Serial worker
         self._serial_worker = SerialWorkerThread(interval=5)
         self._serial_worker.update.connect(self._on_serial_update)
+        self._serial_worker.set_ports(self._serial.get_monitored_ports())
         self._serial_worker.start()
 
         # RTT graph refresh timer
@@ -254,20 +280,40 @@ class MainWindow(QMainWindow):
     # ── Event handlers ──
 
     def _on_ping_update(self, results):
-        self._dashboard.update_ping_data(results)
+        devices_by_id = {device.id: device for device in self._config_service.get_devices()}
+        for result in results:
+            dev_id = result.get('device_id', '')
+            status = result.get('status', 'unknown')
+            rtt_ms = result.get('rtt_ms')
+            device = devices_by_id.get(dev_id)
 
-        # Feed alert service
-        for r in results:
-            dev_id = r.get('device_id', '')
-            status = r.get('status', '')
             alert_info = self._alert_service.on_status_update(dev_id, status)
-            if alert_info.get('escalated'):
+            issue_state = self._alert_service.get_issue_state(dev_id)
+
+            self._device_states[dev_id] = {
+                'status': status,
+                'rtt_ms': rtt_ms,
+                'timestamp': result.get('timestamp'),
+                'fail_count': issue_state.get('count', 0),
+                'issue_status': issue_state.get('issue_status'),
+                'severity': derive_runtime_severity(
+                    status,
+                    getattr(device, 'importance', 'standard') if device else 'standard',
+                    issue_state.get('count', 0),
+                ),
+                'reason': build_status_reason(status, rtt_ms, self._delay_threshold_ms),
+            }
+
+            if alert_info.get('escalated') and self._alerts_enabled:
                 self._handle_alert_escalation(dev_id, alert_info)
+
+        self._update_dashboard_context()
 
     def _handle_alert_escalation(self, device_id, alert_info):
         """Handle escalated alert — sound + tray notification."""
         level = alert_info.get('level', 'warning')
         count = alert_info.get('count', 0)
+        issue_status = alert_info.get('issue_status')
 
         device = self._config_service.get_device(device_id)
         name = device.name if device else device_id
@@ -278,8 +324,18 @@ class MainWindow(QMainWindow):
         # Tray notification
         if hasattr(self, '_tray'):
             if level == 'recovered':
-                msg = f"{name}: Recovered (back online)"
+                if issue_status == 'delayed':
+                    msg = f"{name}: Latency recovered and is back within threshold."
+                else:
+                    msg = f"{name}: Recovered and is back online."
                 icon = QSystemTrayIcon.MessageIcon.Information
+            elif issue_status == 'delayed':
+                if level == 'critical':
+                    msg = f"{name}: High latency persisted for {count} consecutive checks."
+                    icon = QSystemTrayIcon.MessageIcon.Critical
+                else:
+                    msg = f"{name}: Latency is above threshold for {count} consecutive checks."
+                    icon = QSystemTrayIcon.MessageIcon.Warning
             elif level == 'emergency':
                 msg = f"{name}: EMERGENCY ({count} consecutive failures)"
                 icon = QSystemTrayIcon.MessageIcon.Critical
@@ -293,12 +349,13 @@ class MainWindow(QMainWindow):
             self._tray.showMessage(f"{APP_NAME} Alert", msg, icon, 5000)
 
     def _on_status_change(self, data):
-        # Basic tray notification (non-escalation path)
-        settings = self._config_service.get_settings()
-        if not settings.get('alert_enabled', True):
-            return
-        # Escalated alerts handled in _on_ping_update, this is for non-escalated
-        pass
+        device_id = data.get('device_id', '')
+        timestamp = data.get('timestamp')
+        if device_id:
+            self._last_status_changes[device_id] = timestamp
+        if self._stack.currentIndex() == 6:
+            self._history_panel._refresh()
+        self._update_dashboard_context()
 
     def _on_interface_update(self, interfaces):
         self._interfaces.update_interfaces(interfaces)
@@ -309,17 +366,27 @@ class MainWindow(QMainWindow):
     def _refresh_rtt_graph(self):
         if self._ping_worker:
             history = self._ping_worker.get_rtt_history()
-            self._dashboard.update_rtt_graph(history)
+            selected = self._config_service.get_device(self._selected_device_id) if self._selected_device_id else None
+            self._dashboard.update_rtt_graph(
+                history,
+                selected_device_id=self._selected_device_id,
+                selected_device_name=selected.name if selected else None,
+                delay_threshold_ms=self._delay_threshold_ms,
+            )
 
     def _on_settings_changed(self, data):
+        self._delay_threshold_ms = data.get('delay_threshold_ms', self._delay_threshold_ms)
         if self._ping_worker:
             self._ping_worker.set_interval(data.get('ping_interval_seconds', 5))
             self._ping_worker.set_threshold(data.get('delay_threshold_ms', 200))
         if self._interface_worker:
             self._interface_worker.set_interval(data.get('interface_poll_seconds', 3))
         self._sync_alert_settings(data)
+        self._update_dashboard_context()
+        self._refresh_rtt_graph()
 
     def _sync_alert_settings(self, settings):
+        self._alerts_enabled = settings.get('alert_enabled', True)
         self._alert_service.set_sound_enabled(settings.get('sound_enabled', True))
         self._alert_service.set_escalation_enabled(settings.get('escalation_enabled', True))
 
@@ -327,10 +394,19 @@ class MainWindow(QMainWindow):
         """Reload devices after profile/preset change."""
         self._refresh_devices()
         self._history_panel.refresh_device_filter()
+        self._update_dashboard_context()
 
     def _refresh_devices(self):
         devices = self._config_service.get_devices()
         self._dashboard.set_devices(devices)
+        if devices:
+            existing = {device.id for device in devices}
+            if self._selected_device_id not in existing:
+                self._selected_device_id = devices[0].id
+        else:
+            self._selected_device_id = None
+        self._dashboard.set_selected_device(self._selected_device_id)
+        self._update_dashboard_context()
 
     def _add_device(self):
         dialog = DeviceDialog(self)
@@ -346,9 +422,178 @@ class MainWindow(QMainWindow):
                     QMessageBox.warning(self, "Validation Error", str(e))
 
     def _on_device_selected(self, device_id):
+        self._selected_device_id = device_id
+        self._dashboard.set_selected_device(device_id)
         device = self._config_service.get_device(device_id)
         if device:
-            self._scanner.set_target_ip(device.ip)
+            self._scanner.set_target(device.ip, device.ports)
+        self._update_dashboard_context()
+        self._refresh_rtt_graph()
+
+    def _open_device_in_scanner(self, device_id):
+        device = self._config_service.get_device(device_id)
+        if not device:
+            return
+        self._scanner.set_target(device.ip, device.ports)
+        self._switch_page(1)
+
+    def _on_serial_ports_changed(self, ports):
+        if self._serial_worker:
+            self._serial_worker.set_ports(ports)
+
+    def _build_device_snapshots(self):
+        snapshots = []
+        now = datetime.now()
+
+        for device in self._config_service.get_devices():
+            runtime = self._device_states.get(device.id, {})
+            status = runtime.get('status', 'unknown')
+            fail_count = runtime.get('fail_count', 0)
+            severity = runtime.get('severity') or derive_runtime_severity(status, device.importance, fail_count)
+            last_change = self._last_status_changes.get(device.id) or runtime.get('timestamp')
+
+            if not device.enabled:
+                status_label = "Monitoring disabled"
+                reason = "This device is saved in the profile but excluded from live polling."
+                severity = "info"
+                last_change_text = "Monitoring disabled"
+            else:
+                status_label = build_status_label(status)
+                reason = runtime.get('reason') or build_status_reason(
+                    status,
+                    runtime.get('rtt_ms'),
+                    self._delay_threshold_ms,
+                )
+                last_change_text = (
+                    format_relative_time(last_change, now)
+                    if last_change else
+                    "Waiting for the first monitoring result"
+                )
+
+            snapshots.append({
+                'device_id': device.id,
+                'id': device.id,
+                'name': device.name,
+                'ip': device.ip,
+                'category': device.category or "Uncategorized",
+                'importance': device.importance,
+                'importance_label': importance_label(device.importance),
+                'status': status,
+                'status_label': status_label,
+                'severity': severity,
+                'reason': reason,
+                'rtt_ms': runtime.get('rtt_ms'),
+                'fail_count': fail_count,
+                'last_change_text': last_change_text,
+                'last_change_at': last_change,
+                'ports': list(device.ports),
+                'description': device.description,
+                'action_text': build_action_text(status, device.ports, fail_count),
+            })
+
+        snapshots.sort(
+            key=lambda snap: (
+                -severity_rank(snap.get('severity')),
+                -importance_weight(snap.get('importance')),
+                snap.get('name', '').lower(),
+            )
+        )
+        return snapshots
+
+    def _build_overview(self, snapshots):
+        if not snapshots:
+            return {
+                'severity': 'info',
+                'headline': "No devices configured yet",
+                'detail': "Add the ports and devices that matter on the vessel so PortDetector can summarize real health.",
+                'context': "Use Add Device and assign importance so alerts can prioritize the systems that matter most.",
+            }
+
+        critical_count = sum(
+            1 for snap in snapshots
+            if severity_rank(snap.get('severity')) >= severity_rank('critical')
+        )
+        attention_count = sum(1 for snap in snapshots if snap.get('status') in ('delayed', 'disconnected'))
+        offline_count = sum(1 for snap in snapshots if snap.get('status') == 'disconnected')
+        stable_count = sum(1 for snap in snapshots if snap.get('status') == 'connected')
+        top_issue = next((snap for snap in snapshots if snap.get('status') in ('delayed', 'disconnected')), None)
+
+        if critical_count > 0 and top_issue:
+            headline = f"{critical_count} device(s) need immediate attention"
+            detail = (
+                f"{top_issue['name']} is currently {top_issue['status_label'].lower()}. "
+                f"{top_issue['action_text']}"
+            )
+            severity = top_issue.get('severity', 'critical')
+        elif attention_count > 0 and top_issue:
+            headline = f"{attention_count} device(s) need review"
+            detail = (
+                f"{stable_count} stable / {offline_count} offline / "
+                f"{attention_count - offline_count} high-latency. "
+                f"Top review target: {top_issue['name']}."
+            )
+            severity = top_issue.get('severity', 'warning')
+        else:
+            headline = "All monitored devices are currently stable"
+            detail = f"{stable_count} device(s) are responding within the current monitoring threshold."
+            severity = "stable"
+
+        settings = self._config_service.get_settings()
+        context = (
+            f"Ping every {settings.get('ping_interval_seconds', 5)} sec | "
+            f"Delay threshold {self._delay_threshold_ms:,} ms | "
+            f"Latency alerts start after 3 consecutive slow replies"
+        )
+        return {
+            'severity': severity,
+            'headline': headline,
+            'detail': detail,
+            'context': context,
+        }
+
+    def _build_device_detail(self, snapshots):
+        if not snapshots:
+            return {}
+
+        selected_id = self._selected_device_id
+        snapshot = next((snap for snap in snapshots if snap.get('device_id') == selected_id), None)
+        if snapshot is None:
+            snapshot = snapshots[0]
+            self._selected_device_id = snapshot.get('device_id')
+            self._dashboard.set_selected_device(self._selected_device_id)
+
+        meta_parts = [
+            snapshot.get('ip'),
+            snapshot.get('category'),
+            importance_label(snapshot.get('importance')),
+        ]
+        if snapshot.get('last_change_text'):
+            meta_parts.append(snapshot['last_change_text'])
+
+        description = snapshot.get('description') or "Add a short description if operators need more context."
+        ports_text = (
+            f"Reference ports: {build_ports_text(snapshot.get('ports'))}. "
+            f"Role: {description}"
+        )
+
+        return {
+            'device_id': snapshot.get('device_id'),
+            'name': snapshot.get('name'),
+            'severity': snapshot.get('severity'),
+            'status_label': snapshot.get('status_label'),
+            'reason': snapshot.get('reason'),
+            'meta_text': " | ".join(part for part in meta_parts if part),
+            'ports_text': ports_text,
+            'action_text': snapshot.get('action_text'),
+            'has_ports': bool(snapshot.get('ports')),
+        }
+
+    def _update_dashboard_context(self):
+        snapshots = self._build_device_snapshots()
+        self._dashboard.update_device_snapshots(snapshots)
+        self._dashboard.update_overview(self._build_overview(snapshots))
+        self._dashboard.update_device_detail(self._build_device_detail(snapshots))
+        self._refresh_rtt_graph()
 
     def _on_tray_activated(self, reason):
         if reason == QSystemTrayIcon.ActivationReason.DoubleClick:

@@ -20,6 +20,7 @@ from backend.services.log_service import LogService
 from backend.services.traffic_service import TrafficService
 from backend.services.profile_service import ProfileService
 from backend.services.alert_service import AlertService
+from backend.services.backup_service import BackupService
 from backend.services.uptime_service import UptimeService
 from desktop.main_window import MainWindow
 
@@ -38,6 +39,7 @@ def main():
     log_service = LogService(DATA_DIR)
     profile_service = ProfileService(DATA_DIR)
     alert_service = AlertService()
+    backup_service = BackupService(DATA_DIR)
     uptime_service = UptimeService(log_service)
 
     traffic_service = TrafficService()
@@ -50,7 +52,7 @@ def main():
     # Main window
     window = MainWindow(
         config_service, log_service, traffic_service,
-        profile_service, alert_service, uptime_service,
+        profile_service, alert_service, backup_service, uptime_service,
     )
     window.show()
 

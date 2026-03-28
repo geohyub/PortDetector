@@ -2,21 +2,26 @@
 
 import threading
 from collections import defaultdict
-from datetime import datetime
 
 
 class AlertService:
     """Tracks consecutive failures per device and manages alert escalation."""
 
-    # Escalation thresholds: consecutive failures -> severity level
-    LEVELS = [
-        (1, "warning"),      # 1 failure
-        (3, "critical"),     # 3 consecutive
-        (10, "emergency"),   # 10 consecutive
-    ]
+    LEVELS = {
+        "disconnected": [
+            (1, "warning"),
+            (3, "critical"),
+            (10, "emergency"),
+        ],
+        "delayed": [
+            (3, "warning"),
+            (6, "critical"),
+        ],
+    }
 
     def __init__(self):
-        self._fail_counts = defaultdict(int)  # device_id -> consecutive fail count
+        self._fail_counts = defaultdict(int)
+        self._issue_status = {}
         self._lock = threading.Lock()
         self._sound_enabled = True
         self._escalation_enabled = True
@@ -30,38 +35,49 @@ class AlertService:
         with self._lock:
             if status == "connected":
                 prev_count = self._fail_counts.get(device_id, 0)
+                prev_issue = self._issue_status.get(device_id)
                 self._fail_counts[device_id] = 0
-                if prev_count >= 3:
+                self._issue_status[device_id] = None
+                recovery_threshold = 1 if prev_issue == "disconnected" else 3
+                if prev_issue and prev_count >= recovery_threshold:
                     return {
                         'escalated': True,
                         'level': 'recovered',
                         'count': 0,
                         'device_id': device_id,
+                        'issue_status': prev_issue,
                     }
                 return {}
 
-            # Disconnected or delayed
-            self._fail_counts[device_id] += 1
+            prev_issue = self._issue_status.get(device_id)
+            if prev_issue == status:
+                self._fail_counts[device_id] += 1
+            elif prev_issue == "delayed" and status == "disconnected":
+                self._fail_counts[device_id] += 1
+            else:
+                self._fail_counts[device_id] = 1
+
+            self._issue_status[device_id] = status
             count = self._fail_counts[device_id]
 
             if not self._escalation_enabled:
                 return {}
 
-            # Find current escalation level
+            levels = self.LEVELS.get(status, [])
             level = None
-            for threshold, lvl in reversed(self.LEVELS):
+            for threshold, lvl in reversed(levels):
                 if count >= threshold:
                     level = lvl
                     break
 
-            # Only alert at exact thresholds to avoid spam
-            exact_thresholds = [t for t, _ in self.LEVELS]
+            exact_thresholds = [t for t, _ in levels]
             if count in exact_thresholds:
                 return {
                     'escalated': True,
                     'level': level,
                     'count': count,
                     'device_id': device_id,
+                    'issue_status': status,
                 }
 
             return {}
@@ -69,6 +85,17 @@ class AlertService:
     def get_fail_count(self, device_id: str) -> int:
         with self._lock:
             return self._fail_counts.get(device_id, 0)
+
+    def get_issue_status(self, device_id: str) -> str | None:
+        with self._lock:
+            return self._issue_status.get(device_id)
+
+    def get_issue_state(self, device_id: str) -> dict:
+        with self._lock:
+            return {
+                'count': self._fail_counts.get(device_id, 0),
+                'issue_status': self._issue_status.get(device_id),
+            }
 
     def set_sound_enabled(self, enabled: bool):
         self._sound_enabled = enabled
@@ -96,6 +123,8 @@ class AlertService:
                 winsound.Beep(800, 300)
             elif level == "warning":
                 winsound.Beep(600, 400)
+            elif level == "advisory":
+                winsound.Beep(520, 180)
             elif level == "recovered":
                 # Pleasant ascending tone
                 winsound.Beep(400, 150)

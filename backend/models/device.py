@@ -12,6 +12,7 @@ class Device:
     ip: str = ""
     ports: List[int] = field(default_factory=list)
     category: str = ""
+    importance: str = "standard"
     description: str = ""
     enabled: bool = True
 
@@ -29,6 +30,8 @@ class Device:
             if not (1 <= port <= 65535):
                 errors.append("Ports must be 1-65535")
                 break
+        if self.importance not in ("critical", "high", "standard", "optional"):
+            errors.append("Importance must be critical, high, standard, or optional")
         return errors
 
     def to_dict(self):
@@ -42,6 +45,7 @@ class Device:
             ip=data.get('ip', ''),
             ports=data.get('ports', []),
             category=data.get('category', ''),
+            importance=data.get('importance', 'standard'),
             description=data.get('description', ''),
             enabled=data.get('enabled', True),
         )

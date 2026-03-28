@@ -188,6 +188,17 @@ class ScannerPanel(QWidget):
     def set_target_ip(self, ip):
         self._ip_input.setText(ip)
 
+    def set_target(self, ip: str, ports=None):
+        self._ip_input.setText(ip)
+        if ports:
+            self._ports_input.setText(",".join(str(port) for port in ports))
+            self._summary_label.setText(
+                f"Loaded device target {ip} with reference ports "
+                f"{', '.join(str(port) for port in ports)}."
+            )
+        else:
+            self._summary_label.setText(f"Loaded device target {ip}.")
+
 
 def pg_color(hex_color):
     """Convert hex color to QColor for table items."""

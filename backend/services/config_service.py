@@ -34,6 +34,8 @@ class ConfigService:
                 "web_port": DEFAULT_WEB_PORT,
                 "auto_open_browser": True,
                 "alert_enabled": True,
+                "sound_enabled": True,
+                "escalation_enabled": True,
                 "alert_volume": 0.5,
             },
             "devices": [
@@ -43,6 +45,7 @@ class ConfigService:
                     "ip": "127.0.0.1",
                     "ports": [80, 443],
                     "category": "System",
+                    "importance": "standard",
                     "description": "Local machine",
                     "enabled": True,
                 }
@@ -59,7 +62,8 @@ class ConfigService:
                 with open(self._config_path, 'r', encoding='utf-8') as f:
                     config = json.load(f)
 
-            self._settings = config.get('settings', self._default_config()['settings'])
+            default_settings = self._default_config()['settings']
+            self._settings = {**default_settings, **config.get('settings', {})}
             self._devices = [Device.from_dict(d) for d in config.get('devices', [])]
 
             max_num = 0
@@ -140,8 +144,7 @@ class ConfigService:
     def update_settings(self, data: dict) -> dict:
         with self._lock:
             for key, val in data.items():
-                if key in self._settings:
-                    self._settings[key] = val
+                self._settings[key] = val
             self._save()
             return dict(self._settings)
 
@@ -155,7 +158,8 @@ class ConfigService:
 
     def import_config(self, config: dict):
         with self._lock:
-            self._settings = config.get('settings', self._settings)
+            defaults = self._default_config()['settings']
+            self._settings = {**defaults, **config.get('settings', self._settings)}
             self._devices = [Device.from_dict(d) for d in config.get('devices', [])]
             max_num = 0
             for dev in self._devices:

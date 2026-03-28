@@ -13,7 +13,7 @@ class LogService:
         self._log_path = os.path.join(data_dir, 'history.log')
         os.makedirs(data_dir, exist_ok=True)
 
-    def log_event(self, device_id: str, ip: str, event: str, rtt_ms: Optional[int] = None):
+    def log_event(self, device_id: str, ip: str, event: str, rtt_ms: Optional[int] = None, **extra):
         """Append a status change event."""
         entry = {
             "timestamp": datetime.now().isoformat(timespec='seconds'),
@@ -22,12 +22,16 @@ class LogService:
             "event": event,
             "rtt_ms": rtt_ms,
         }
+        for key, value in extra.items():
+            if value is not None:
+                entry[key] = value
         self._rotate_if_needed()
         with open(self._log_path, 'a', encoding='utf-8') as f:
             f.write(json.dumps(entry, ensure_ascii=False) + '\n')
 
     def get_history(self, limit: int = 100, offset: int = 0,
-                    device_id: Optional[str] = None) -> List[dict]:
+                    device_id: Optional[str] = None,
+                    events: Optional[List[str]] = None) -> List[dict]:
         """Read history entries (newest first). Uses reverse file reading for efficiency."""
         if not os.path.exists(self._log_path):
             return []
@@ -57,6 +61,8 @@ class LogService:
                             entry = json.loads(line.decode('utf-8'))
                             if device_id and entry.get('device_id') != device_id:
                                 continue
+                            if events and entry.get('event') not in events:
+                                continue
                             if skipped < offset:
                                 skipped += 1
                                 continue
@@ -71,6 +77,8 @@ class LogService:
                     try:
                         entry = json.loads(buf.strip().decode('utf-8'))
                         ok = not device_id or entry.get('device_id') == device_id
+                        if ok and events:
+                            ok = entry.get('event') in events
                         if ok:
                             if skipped < offset:
                                 pass
@@ -83,7 +91,8 @@ class LogService:
 
         return entries
 
-    def get_all_entries(self) -> List[dict]:
+    def get_all_entries(self, device_id: Optional[str] = None,
+                        events: Optional[List[str]] = None) -> List[dict]:
         """Get all entries for CSV export."""
         if not os.path.exists(self._log_path):
             return []
@@ -93,7 +102,12 @@ class LogService:
                 line = line.strip()
                 if line:
                     try:
-                        entries.append(json.loads(line))
+                        entry = json.loads(line)
+                        if device_id and entry.get('device_id') != device_id:
+                            continue
+                        if events and entry.get('event') not in events:
+                            continue
+                        entries.append(entry)
                     except json.JSONDecodeError:
                         continue
         return entries

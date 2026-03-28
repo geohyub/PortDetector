@@ -2,7 +2,15 @@
 
 from collections import defaultdict
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional
+from typing import Dict, List
+
+from backend.utils.monitoring_presenter import (
+    build_report_action,
+    build_report_reason,
+    derive_report_severity,
+    importance_weight,
+    severity_rank,
+)
 
 
 class UptimeService:
@@ -95,7 +103,8 @@ class UptimeService:
 
         return results
 
-    def generate_report_data(self, devices: list, hours: int = 24) -> List[dict]:
+    def generate_report_data(self, devices: list, hours: int = 24,
+                             delay_threshold_ms: int = 200) -> List[dict]:
         """Generate report rows for Excel export."""
         uptime_data = self.calculate_uptime(hours)
         rows = []
@@ -104,19 +113,55 @@ class UptimeService:
             name = dev.name if hasattr(dev, 'name') else dev.get('name', '')
             ip = dev.ip if hasattr(dev, 'ip') else dev.get('ip', '')
             cat = dev.category if hasattr(dev, 'category') else dev.get('category', '')
+            importance = getattr(dev, 'importance', None) if hasattr(dev, 'importance') else dev.get('importance', 'standard')
+            ports = list(dev.ports) if hasattr(dev, 'ports') else dev.get('ports', [])
+            description = getattr(dev, 'description', '') if hasattr(dev, 'description') else dev.get('description', '')
 
             stats = uptime_data.get(dev_id, {
                 'uptime_pct': 100.0, 'total_mins': hours * 60,
                 'up_mins': hours * 60, 'down_mins': 0,
                 'disconnects': 0, 'avg_rtt': None, 'status_changes': 0,
             })
+            severity = derive_report_severity(
+                stats['uptime_pct'],
+                stats['disconnects'],
+                stats['avg_rtt'],
+                importance,
+                delay_threshold_ms,
+                stats['status_changes'],
+            )
 
             rows.append({
                 'device_id': dev_id,
                 'name': name,
                 'ip': ip,
                 'category': cat,
+                'importance': importance,
+                'ports': ports,
+                'description': description,
+                'report_severity': severity,
+                'report_summary': build_report_reason(
+                    stats['uptime_pct'],
+                    stats['disconnects'],
+                    stats['avg_rtt'],
+                    stats['status_changes'],
+                    delay_threshold_ms,
+                ),
+                'report_action': build_report_action(
+                    severity,
+                    ports,
+                    stats['disconnects'],
+                    stats['avg_rtt'],
+                    delay_threshold_ms,
+                ),
                 **stats,
             })
 
+        rows.sort(
+            key=lambda row: (
+                -severity_rank(row.get('report_severity')),
+                -importance_weight(row.get('importance')),
+                row.get('name', '').lower(),
+            )
+        )
         return rows

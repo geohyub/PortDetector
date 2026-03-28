@@ -4,7 +4,7 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QTableWidget, QTableWidgetItem, QHeaderView, QLineEdit,
 )
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont, QColor
 
 from desktop.theme import Colors, Fonts
@@ -12,6 +12,8 @@ from backend.services.serial_service import list_serial_ports
 
 
 class SerialPanel(QWidget):
+    monitored_ports_changed = Signal(list)
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self._monitored_ports = []
@@ -106,6 +108,7 @@ class SerialPanel(QWidget):
         if port and port not in self._monitored_ports:
             self._monitored_ports.append(port)
             self._port_input.clear()
+            self.monitored_ports_changed.emit(self.get_monitored_ports())
             self._detect_ports()
 
     def get_monitored_ports(self) -> list:

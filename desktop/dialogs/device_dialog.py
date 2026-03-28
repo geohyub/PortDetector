@@ -2,7 +2,7 @@
 
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QFormLayout,
-    QLineEdit, QComboBox, QCheckBox, QLabel, QPushButton, QTextEdit,
+    QLineEdit, QComboBox, QCheckBox, QLabel, QPushButton,
 )
 from PySide6.QtCore import Qt
 
@@ -23,6 +23,13 @@ CATEGORIES = [
     "Serial/NMEA",
     # Other
     "Other",
+]
+
+IMPORTANCE_OPTIONS = [
+    ("Critical", "critical"),
+    ("Important", "high"),
+    ("Standard", "standard"),
+    ("Optional", "optional"),
 ]
 
 
@@ -87,6 +94,11 @@ class DeviceDialog(QDialog):
         self._category_combo.addItems(CATEGORIES)
         form.addRow("Category:", self._category_combo)
 
+        self._importance_combo = QComboBox()
+        for label, value in IMPORTANCE_OPTIONS:
+            self._importance_combo.addItem(label, value)
+        form.addRow("Importance:", self._importance_combo)
+
         self._desc_input = QLineEdit()
         self._desc_input.setPlaceholderText("Optional description")
         form.addRow("Description:", self._desc_input)
@@ -126,6 +138,10 @@ class DeviceDialog(QDialog):
         idx = self._category_combo.findText(cat)
         if idx >= 0:
             self._category_combo.setCurrentIndex(idx)
+        importance = data.get('importance', 'standard')
+        idx = self._importance_combo.findData(importance)
+        if idx >= 0:
+            self._importance_combo.setCurrentIndex(idx)
         self._desc_input.setText(data.get('description', ''))
         self._enabled_check.setChecked(data.get('enabled', True))
 
@@ -152,6 +168,7 @@ class DeviceDialog(QDialog):
             'ip': ip,
             'ports': ports,
             'category': self._category_combo.currentText(),
+            'importance': self._importance_combo.currentData(),
             'description': self._desc_input.text().strip(),
             'enabled': self._enabled_check.isChecked(),
         }

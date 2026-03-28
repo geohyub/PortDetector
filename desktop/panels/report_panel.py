@@ -9,6 +9,19 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont, QColor
 
 from desktop.theme import Colors, Fonts
+from backend.utils.monitoring_presenter import (
+    importance_label,
+    severity_label,
+)
+
+
+SEVERITY_COLORS = {
+    "stable": Colors.CONNECTED,
+    "advisory": Colors.WARNING,
+    "warning": Colors.WARNING,
+    "critical": Colors.DISCONNECTED,
+    "emergency": Colors.DISCONNECTED,
+}
 
 
 class ReportPanel(QWidget):
@@ -58,16 +71,37 @@ class ReportPanel(QWidget):
         ctrl.addStretch()
         layout.addLayout(ctrl)
 
+        self._summary_label = QLabel("Generate a report to summarize the fleet health over time.")
+        self._summary_label.setWordWrap(True)
+        self._summary_label.setStyleSheet(
+            f"""
+            QLabel {{
+                background-color: {Colors.BG_CARD};
+                border: 1px solid {Colors.BORDER};
+                border-radius: 8px;
+                padding: 10px 12px;
+                color: {Colors.TEXT_DIM};
+                font-size: {Fonts.SIZE_SM}px;
+            }}
+        """
+        )
+        layout.addWidget(self._summary_label)
+
         # Table
         self._table = QTableWidget()
-        cols = ["Device", "IP", "Category", "Uptime %", "Up (min)", "Down (min)",
-                "Disconnects", "Avg RTT (ms)", "Status Changes"]
+        cols = ["Device", "Importance", "Health", "Uptime %", "Disconnects",
+                "Avg RTT (ms)", "Status Changes", "Why It Matters", "Next Action"]
         self._table.setColumnCount(len(cols))
         self._table.setHorizontalHeaderLabels(cols)
         self._table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        for i in [3, 4, 5, 6, 7, 8]:
+        for i in [1, 2, 3, 4, 5, 6]:
             self._table.horizontalHeader().setSectionResizeMode(i, QHeaderView.ResizeMode.Fixed)
-            self._table.setColumnWidth(i, 100)
+        self._table.setColumnWidth(1, 90)
+        self._table.setColumnWidth(2, 90)
+        self._table.setColumnWidth(3, 90)
+        self._table.setColumnWidth(4, 95)
+        self._table.setColumnWidth(5, 105)
+        self._table.setColumnWidth(6, 100)
         self._table.setShowGrid(False)
         self._table.setAlternatingRowColors(True)
         self._table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
@@ -75,10 +109,45 @@ class ReportPanel(QWidget):
         self._table.setStyleSheet(f"QTableWidget {{ alternate-background-color: {Colors.BG_ALT}; }}")
         layout.addWidget(self._table, 1)
 
+    def _update_summary(self, hours):
+        if not self._report_data:
+            self._summary_label.setText("No devices found in the selected period.")
+            return
+
+        counts = {
+            'critical': 0,
+            'warning': 0,
+            'advisory': 0,
+            'stable': 0,
+        }
+        for row in self._report_data:
+            severity = row.get('report_severity', 'stable')
+            if severity in counts:
+                counts[severity] += 1
+            elif severity == 'emergency':
+                counts['critical'] += 1
+
+        headline = (
+            f"Last {hours} hr: {counts['critical']} critical, {counts['warning']} warning, "
+            f"{counts['advisory']} advisory, {counts['stable']} stable device(s)."
+        )
+        top = self._report_data[0]
+        self._summary_label.setText(
+            headline + " "
+            f"Top review target: {top['name']} ({severity_label(top['report_severity'])}). "
+            f"{top['report_action']}"
+        )
+
     def _generate(self):
         hours = self._period_combo.currentData()
         devices = self._config_service.get_devices()
-        self._report_data = self._uptime_service.generate_report_data(devices, hours)
+        delay_threshold_ms = self._config_service.get_settings().get('delay_threshold_ms', 200)
+        self._report_data = self._uptime_service.generate_report_data(
+            devices,
+            hours,
+            delay_threshold_ms=delay_threshold_ms,
+        )
+        self._update_summary(hours)
 
         self._table.setRowCount(0)
         mono = QFont(Fonts.MONO, Fonts.SIZE_SM)
@@ -87,13 +156,14 @@ class ReportPanel(QWidget):
             row = self._table.rowCount()
             self._table.insertRow(row)
 
-            self._table.setItem(row, 0, QTableWidgetItem(row_data['name']))
+            self._table.setItem(row, 0, QTableWidgetItem(f"{row_data['name']} ({row_data['ip']})"))
 
-            ip_item = QTableWidgetItem(row_data['ip'])
-            ip_item.setFont(mono)
-            self._table.setItem(row, 1, ip_item)
+            self._table.setItem(row, 1, QTableWidgetItem(importance_label(row_data['importance'])))
 
-            self._table.setItem(row, 2, QTableWidgetItem(row_data['category']))
+            severity = row_data['report_severity']
+            severity_item = QTableWidgetItem(severity_label(severity))
+            severity_item.setForeground(QColor(SEVERITY_COLORS.get(severity, Colors.TEXT_DIM)))
+            self._table.setItem(row, 2, severity_item)
 
             # Uptime %
             pct = row_data['uptime_pct']
@@ -108,14 +178,6 @@ class ReportPanel(QWidget):
                 pct_item.setForeground(QColor(Colors.DISCONNECTED))
             self._table.setItem(row, 3, pct_item)
 
-            # Up/Down minutes
-            for col, key in [(4, 'up_mins'), (5, 'down_mins')]:
-                val = row_data[key]
-                item = QTableWidgetItem(f"{val:,.0f}")
-                item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-                item.setFont(mono)
-                self._table.setItem(row, col, item)
-
             # Disconnects
             disc = row_data['disconnects']
             disc_item = QTableWidgetItem(str(disc))
@@ -123,7 +185,7 @@ class ReportPanel(QWidget):
             disc_item.setFont(mono)
             if disc > 0:
                 disc_item.setForeground(QColor(Colors.DISCONNECTED))
-            self._table.setItem(row, 6, disc_item)
+            self._table.setItem(row, 4, disc_item)
 
             # Avg RTT
             avg_rtt = row_data['avg_rtt']
@@ -131,14 +193,17 @@ class ReportPanel(QWidget):
             rtt_item = QTableWidgetItem(rtt_text)
             rtt_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
             rtt_item.setFont(mono)
-            self._table.setItem(row, 7, rtt_item)
+            self._table.setItem(row, 5, rtt_item)
 
             # Status changes
             sc = row_data['status_changes']
             sc_item = QTableWidgetItem(str(sc))
             sc_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
             sc_item.setFont(mono)
-            self._table.setItem(row, 8, sc_item)
+            self._table.setItem(row, 6, sc_item)
+
+            self._table.setItem(row, 7, QTableWidgetItem(row_data['report_summary']))
+            self._table.setItem(row, 8, QTableWidgetItem(row_data['report_action']))
 
     def _export_excel(self):
         if not self._report_data:
@@ -168,25 +233,45 @@ class ReportPanel(QWidget):
                 bottom=Side(style='thin', color='2A2A4A'),
             )
 
-            headers = ["Device", "IP", "Category", "Uptime %", "Up (min)",
-                        "Down (min)", "Disconnects", "Avg RTT (ms)", "Status Changes"]
+            summary_lines = [
+                "PortDetector Uptime Report",
+                self._summary_label.text(),
+                f"Generated: {self._period_combo.currentText()}",
+            ]
+            for row_idx, line in enumerate(summary_lines, 1):
+                ws.cell(row=row_idx, column=1, value=line)
+            ws.append([])
+
+            header_row = 5
+            headers = ["Device", "IP", "Category", "Importance", "Health", "Uptime %",
+                        "Up (min)", "Down (min)", "Disconnects", "Avg RTT (ms)",
+                        "Status Changes", "Why It Matters", "Next Action"]
 
             for col, h in enumerate(headers, 1):
-                cell = ws.cell(row=1, column=col, value=h)
+                cell = ws.cell(row=header_row, column=col, value=h)
                 cell.font = header_font
                 cell.fill = header_fill
                 cell.alignment = Alignment(horizontal='center')
+                cell.border = thin_border
 
             # Data
             data_font = Font(name="Cascadia Code", size=10)
             num_align = Alignment(horizontal='right')
 
-            for i, row_data in enumerate(self._report_data, 2):
+            for i, row_data in enumerate(self._report_data, header_row + 1):
                 ws.cell(row=i, column=1, value=row_data['name'])
                 ws.cell(row=i, column=2, value=row_data['ip']).font = data_font
                 ws.cell(row=i, column=3, value=row_data['category'])
+                ws.cell(row=i, column=4, value=importance_label(row_data['importance']))
 
-                pct_cell = ws.cell(row=i, column=4, value=row_data['uptime_pct'] / 100)
+                health_cell = ws.cell(row=i, column=5, value=severity_label(row_data['report_severity']))
+                health_cell.font = Font(
+                    name="Pretendard",
+                    size=10,
+                    color=SEVERITY_COLORS.get(row_data['report_severity'], Colors.TEXT_DIM).replace("#", "").upper(),
+                )
+
+                pct_cell = ws.cell(row=i, column=6, value=row_data['uptime_pct'] / 100)
                 pct_cell.number_format = '0.0%'
                 pct_cell.alignment = num_align
                 pct_cell.font = data_font
@@ -200,27 +285,31 @@ class ReportPanel(QWidget):
                 else:
                     pct_cell.font = Font(name="Cascadia Code", size=10, color="06D6A0")
 
-                for col, key in [(5, 'up_mins'), (6, 'down_mins')]:
+                for col, key in [(7, 'up_mins'), (8, 'down_mins')]:
                     c = ws.cell(row=i, column=col, value=row_data[key])
                     c.number_format = '#,##0'
                     c.alignment = num_align
                     c.font = data_font
 
-                ws.cell(row=i, column=7, value=row_data['disconnects']).alignment = num_align
+                ws.cell(row=i, column=9, value=row_data['disconnects']).alignment = num_align
 
                 avg_rtt = row_data['avg_rtt']
-                rtt_cell = ws.cell(row=i, column=8, value=avg_rtt if avg_rtt is not None else '')
+                rtt_cell = ws.cell(row=i, column=10, value=avg_rtt if avg_rtt is not None else '')
                 if avg_rtt is not None:
                     rtt_cell.number_format = '#,##0.0'
                 rtt_cell.alignment = num_align
                 rtt_cell.font = data_font
 
-                ws.cell(row=i, column=9, value=row_data['status_changes']).alignment = num_align
+                ws.cell(row=i, column=11, value=row_data['status_changes']).alignment = num_align
+                ws.cell(row=i, column=12, value=row_data['report_summary'])
+                ws.cell(row=i, column=13, value=row_data['report_action'])
 
             # Column widths
-            widths = [20, 16, 14, 12, 12, 12, 12, 14, 14]
+            widths = [20, 16, 14, 12, 12, 12, 12, 12, 12, 14, 14, 34, 34]
             for col, w in enumerate(widths, 1):
                 ws.column_dimensions[get_column_letter(col)].width = w
+
+            ws.freeze_panes = f"A{header_row + 1}"
 
             wb.save(path)
             QMessageBox.information(self, "Export", f"Report exported to:\n{path}")

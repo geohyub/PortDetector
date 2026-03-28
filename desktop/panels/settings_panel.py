@@ -20,10 +20,11 @@ class SettingsPanel(QWidget):
     profile_loaded = Signal()     # devices changed
     preset_loaded = Signal()      # devices changed from preset
 
-    def __init__(self, config_service, profile_service, parent=None):
+    def __init__(self, config_service, profile_service, backup_service, parent=None):
         super().__init__(parent)
         self._config_service = config_service
         self._profile_service = profile_service
+        self._backup_service = backup_service
         self._build_ui()
         self._load_settings()
 
@@ -170,6 +171,51 @@ class SettingsPanel(QWidget):
 
         layout.addWidget(profile_group)
 
+        # ── Safety Backups ──
+        backup_group = QGroupBox("Safety Backups")
+        backup_layout = QVBoxLayout(backup_group)
+        backup_layout.setSpacing(8)
+
+        backup_desc = QLabel(
+            "A backup is created before preset/profile/config replacement. "
+            "You can also create and restore backups manually."
+        )
+        backup_desc.setWordWrap(True)
+        backup_desc.setStyleSheet(f"font-size: {Fonts.SIZE_SM}px; color: {Colors.TEXT_DIM}; background: transparent;")
+        backup_layout.addWidget(backup_desc)
+
+        self._backup_status = QLabel("")
+        self._backup_status.setWordWrap(True)
+        self._backup_status.setStyleSheet(f"font-size: {Fonts.SIZE_XS}px; color: {Colors.TEXT_MUTED}; background: transparent;")
+        backup_layout.addWidget(self._backup_status)
+
+        backup_row = QHBoxLayout()
+        backup_row.setSpacing(6)
+
+        self._backup_combo = QComboBox()
+        self._backup_combo.setMinimumWidth(320)
+        backup_row.addWidget(self._backup_combo)
+
+        refresh_backup_btn = QPushButton("Refresh")
+        refresh_backup_btn.setFixedHeight(30)
+        refresh_backup_btn.clicked.connect(self._refresh_backups)
+        backup_row.addWidget(refresh_backup_btn)
+
+        create_backup_btn = QPushButton("Create Backup")
+        create_backup_btn.setFixedHeight(30)
+        create_backup_btn.clicked.connect(self._create_manual_backup)
+        backup_row.addWidget(create_backup_btn)
+
+        restore_backup_btn = QPushButton("Restore")
+        restore_backup_btn.setObjectName("btn_primary")
+        restore_backup_btn.setFixedHeight(30)
+        restore_backup_btn.clicked.connect(self._restore_backup)
+        backup_row.addWidget(restore_backup_btn)
+
+        backup_row.addStretch()
+        backup_layout.addLayout(backup_row)
+        layout.addWidget(backup_group)
+
         # ── Config Import/Export ──
         config_group = QGroupBox("Configuration")
         config_layout = QHBoxLayout(config_group)
@@ -205,6 +251,8 @@ class SettingsPanel(QWidget):
         outer.setContentsMargins(0, 0, 0, 0)
         outer.addWidget(scroll)
 
+        self._refresh_backups()
+
     # ── Settings ──
 
     def _load_settings(self):
@@ -234,6 +282,93 @@ class SettingsPanel(QWidget):
             'sound_enabled': self._sound_enabled.isChecked(),
             'escalation_enabled': self._escalation_enabled.isChecked(),
         }
+
+    # ── Backups ──
+
+    def _refresh_backups(self, select_filename=None):
+        current = select_filename or self._backup_combo.currentData()
+        backups = self._backup_service.list_backups()
+
+        self._backup_combo.blockSignals(True)
+        self._backup_combo.clear()
+        self._backup_combo.addItem("Select backup to restore", "")
+        for backup in backups:
+            label = f"{backup['created']} | {backup['source']} ({backup['device_count']} dev)"
+            self._backup_combo.addItem(label, backup['filename'])
+        self._backup_combo.blockSignals(False)
+
+        for i in range(self._backup_combo.count()):
+            if self._backup_combo.itemData(i) == current:
+                self._backup_combo.setCurrentIndex(i)
+                break
+
+        if backups:
+            latest = backups[0]
+            self._backup_status.setText(
+                f"Latest backup: {latest['created']} | {latest['source']} | "
+                f"{latest['device_count']} device(s)"
+            )
+        else:
+            self._backup_status.setText("No backups created yet.")
+
+    def _create_restore_point(self, source: str, note: str):
+        backup = self._backup_service.create_backup(
+            self._config_service.export_config(),
+            source=source,
+            note=note,
+        )
+        self._refresh_backups(select_filename=backup['filename'])
+        return backup
+
+    def _create_manual_backup(self):
+        try:
+            backup = self._create_restore_point(
+                "manual-backup",
+                "Manual backup created from Settings.",
+            )
+            QMessageBox.information(
+                self,
+                "Backup Created",
+                f"Saved backup:\n{backup['filename']}",
+            )
+        except Exception as e:
+            QMessageBox.warning(self, "Backup Error", str(e))
+
+    def _restore_backup(self):
+        filename = self._backup_combo.currentData()
+        if not filename:
+            QMessageBox.information(self, "Restore Backup", "Select a backup first.")
+            return
+
+        reply = QMessageBox.question(
+            self,
+            "Restore Backup",
+            "This will REPLACE the current devices and settings with the selected backup. Continue?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        try:
+            restore_point = self._create_restore_point(
+                "before-backup-restore",
+                f"Automatic restore point before restoring {filename}",
+            )
+            payload = self._backup_service.load_backup(filename)
+            if not payload:
+                raise ValueError("Backup not found.")
+
+            self._config_service.import_config(payload.get('config', {}))
+            self._load_settings()
+            self.profile_loaded.emit()
+            QMessageBox.information(
+                self,
+                "Backup Restored",
+                f"Restored backup '{filename}'.\n"
+                f"Previous state was saved as '{restore_point['filename']}'.",
+            )
+        except Exception as e:
+            QMessageBox.warning(self, "Restore Error", str(e))
 
     # ── Presets ──
 
@@ -268,31 +403,40 @@ class SettingsPanel(QWidget):
             return
 
         try:
+            restore_point = self._create_restore_point(
+                "before-load-preset",
+                f"Automatic restore point before preset {os.path.basename(path)}",
+            )
             with open(path, 'r', encoding='utf-8') as f:
                 data = yaml.safe_load(f)
 
             devices = data.get('devices', [])
             from backend.models.device import Device
-
-            # Clear existing and add preset devices
-            for dev in list(self._config_service.get_devices()):
-                self._config_service.delete_device(dev.id)
-
+            imported_devices = []
             for d in devices:
                 device = Device.from_dict({
                     'name': d.get('name', ''),
                     'ip': d.get('ip', ''),
                     'ports': d.get('ports', []),
                     'category': d.get('category', 'Other'),
+                    'importance': d.get('importance', 'standard'),
                     'description': d.get('description', ''),
                     'enabled': d.get('enabled', True),
                 })
-                self._config_service.add_device(device)
+                errors = device.validate()
+                if errors:
+                    raise ValueError("; ".join(errors))
+                imported_devices.append(device.to_dict())
+
+            config = self._config_service.export_config()
+            config['devices'] = imported_devices
+            self._config_service.import_config(config)
 
             self.preset_loaded.emit()
             QMessageBox.information(
                 self, "Preset Loaded",
-                f"Loaded {len(devices)} devices from preset."
+                f"Loaded {len(devices)} devices from preset.\n"
+                f"Backup created: {restore_point['filename']}"
             )
         except Exception as e:
             QMessageBox.warning(self, "Preset Error", str(e))
@@ -352,15 +496,27 @@ class SettingsPanel(QWidget):
         if reply != QMessageBox.StandardButton.Yes:
             return
 
-        profile = self._profile_service.load_profile(filename)
-        if not profile:
-            QMessageBox.warning(self, "Load Error", "Profile not found.")
-            return
+        try:
+            restore_point = self._create_restore_point(
+                "before-load-profile",
+                f"Automatic restore point before profile {filename}",
+            )
+            profile = self._profile_service.load_profile(filename)
+            if not profile:
+                QMessageBox.warning(self, "Load Error", "Profile not found.")
+                return
 
-        self._config_service.import_config(profile)
-        self._load_settings()
-        self.profile_loaded.emit()
-        QMessageBox.information(self, "Profile Loaded", f"Loaded profile: {profile.get('name', filename)}")
+            self._config_service.import_config(profile)
+            self._load_settings()
+            self.profile_loaded.emit()
+            QMessageBox.information(
+                self,
+                "Profile Loaded",
+                f"Loaded profile: {profile.get('name', filename)}\n"
+                f"Backup created: {restore_point['filename']}",
+            )
+        except Exception as e:
+            QMessageBox.warning(self, "Load Error", str(e))
 
     def _delete_profile(self):
         filename = self._profile_combo.currentData()
@@ -384,12 +540,21 @@ class SettingsPanel(QWidget):
         if not path:
             return
         try:
+            restore_point = self._create_restore_point(
+                "before-import-config",
+                f"Automatic restore point before importing {os.path.basename(path)}",
+            )
             with open(path, 'r', encoding='utf-8') as f:
                 config = json.load(f)
             self._config_service.import_config(config)
             self._load_settings()
             self.profile_loaded.emit()
-            QMessageBox.information(self, "Import", "Configuration imported successfully.")
+            QMessageBox.information(
+                self,
+                "Import",
+                "Configuration imported successfully.\n"
+                f"Backup created: {restore_point['filename']}",
+            )
         except Exception as e:
             QMessageBox.warning(self, "Import Error", str(e))
 
