@@ -12,6 +12,7 @@ from PySide6.QtCore import Qt, Signal
 import pyqtgraph as pg
 
 from desktop.theme import Colors, Fonts
+from desktop.i18n import t
 from backend.utils.monitoring_presenter import (
     severity_label,
     severity_rank,
@@ -109,7 +110,7 @@ class DeviceCard(QFrame):
         self._rtt_label = QLabel("--")
         self._rtt_label.setStyleSheet(
             f"font-size: {Fonts.SIZE_LG}px; font-weight: 700; color: {Colors.TEXT}; "
-            f"font-family: '{Fonts.MONO}'; background: transparent;"
+            f"font-family: '{Fonts.FAMILY}'; background: transparent;"
         )
         self._rtt_label.setAlignment(Qt.AlignmentFlag.AlignRight)
         rtt_layout.addWidget(self._rtt_label)
@@ -168,13 +169,13 @@ class DeviceCard(QFrame):
             self._rtt_label.setText(f"{rtt_ms:,}")
             self._rtt_label.setStyleSheet(
                 f"font-size: {Fonts.SIZE_LG}px; font-weight: 700; color: {severity_color}; "
-                f"font-family: '{Fonts.MONO}'; background: transparent;"
+                f"font-family: '{Fonts.FAMILY}'; background: transparent;"
             )
         else:
             self._rtt_label.setText("--")
             self._rtt_label.setStyleSheet(
                 f"font-size: {Fonts.SIZE_LG}px; font-weight: 700; color: {Colors.TEXT_MUTED}; "
-                f"font-family: '{Fonts.MONO}'; background: transparent;"
+                f"font-family: '{Fonts.FAMILY}'; background: transparent;"
             )
 
         self._apply_style()
@@ -194,19 +195,21 @@ class SummaryBar(QWidget):
         layout.setSpacing(18)
 
         self._labels = {}
-        for key, label_text, color in [
-            ("total", "Monitored", Colors.TEXT),
-            ("stable", "Stable", Colors.CONNECTED),
-            ("attention", "Attention", Colors.WARNING),
-            ("offline", "Offline", Colors.DISCONNECTED),
+        self._name_labels = {}
+        for key, i18n_key, color in [
+            ("total", "dash.monitored", Colors.TEXT),
+            ("stable", "dash.stable", Colors.CONNECTED),
+            ("attention", "dash.attention", Colors.WARNING),
+            ("offline", "dash.offline", Colors.DISCONNECTED),
         ]:
+            label_text = t(i18n_key)
             item = QHBoxLayout()
             item.setSpacing(5)
 
             count = QLabel("0")
             count.setStyleSheet(
                 f"font-size: {Fonts.SIZE_LG}px; font-weight: 700; color: {color}; "
-                f"font-family: '{Fonts.MONO}'; background: transparent;"
+                f"font-family: '{Fonts.FAMILY}'; background: transparent;"
             )
             item.addWidget(count)
 
@@ -218,8 +221,13 @@ class SummaryBar(QWidget):
 
             layout.addLayout(item)
             self._labels[key] = count
+            self._name_labels[key] = (name, i18n_key)
 
         layout.addStretch()
+
+    def retranslate(self):
+        for key, (label, i18n_key) in self._name_labels.items():
+            label.setText(t(i18n_key))
 
     def update_counts(self, total, stable, attention, offline):
         self._labels["total"].setText(f"{total}")
@@ -247,13 +255,13 @@ class OverviewBanner(QFrame):
         layout.setContentsMargins(14, 12, 14, 12)
         layout.setSpacing(4)
 
-        self._headline = QLabel("Waiting for first monitoring sweep")
+        self._headline = QLabel(t("dash.waiting_sweep"))
         self._headline.setStyleSheet(
             f"font-size: {Fonts.SIZE_LG}px; font-weight: 700; color: {Colors.TEXT}; background: transparent;"
         )
         layout.addWidget(self._headline)
 
-        self._detail = QLabel("The dashboard will summarize current health once the first ping cycle completes.")
+        self._detail = QLabel(t("dash.waiting_detail"))
         self._detail.setWordWrap(True)
         self._detail.setStyleSheet(
             f"font-size: {Fonts.SIZE_SM}px; color: {Colors.TEXT_DIM}; background: transparent;"
@@ -309,7 +317,7 @@ class DeviceDetailPanel(QFrame):
         layout.setSpacing(6)
 
         top_row = QHBoxLayout()
-        self._title = QLabel("Selected device")
+        self._title = QLabel(t("dash.selected_device"))
         self._title.setStyleSheet(
             f"font-size: {Fonts.SIZE_LG}px; font-weight: 700; color: {Colors.TEXT}; background: transparent;"
         )
@@ -324,7 +332,7 @@ class DeviceDetailPanel(QFrame):
         top_row.addWidget(self._severity)
         layout.addLayout(top_row)
 
-        self._status = QLabel("Select a device card to inspect it.")
+        self._status = QLabel(t("dash.select_prompt"))
         self._status.setStyleSheet(
             f"font-size: {Fonts.SIZE_SM}px; font-weight: 600; color: {Colors.TEXT_DIM}; background: transparent;"
         )
@@ -361,7 +369,7 @@ class DeviceDetailPanel(QFrame):
         btn_row = QHBoxLayout()
         btn_row.addStretch()
 
-        self._scan_btn = QPushButton("Open In Scanner")
+        self._scan_btn = QPushButton(t("dash.open_scanner"))
         self._scan_btn.setObjectName("btn_primary")
         self._scan_btn.setFixedHeight(30)
         self._scan_btn.setEnabled(False)
@@ -435,19 +443,26 @@ class DashboardPanel(QWidget):
         layout.setSpacing(12)
 
         header = QHBoxLayout()
-        title = QLabel("Dashboard")
-        title.setStyleSheet(
+        self._title = QLabel(t("dash.title"))
+        self._title.setStyleSheet(
             f"font-size: {Fonts.SIZE_XL}px; font-weight: 700; color: {Colors.TEXT}; background: transparent;"
         )
-        header.addWidget(title)
+        header.addWidget(self._title)
         header.addStretch()
 
-        add_btn = QPushButton("+ Add Device")
-        add_btn.setObjectName("btn_primary")
-        add_btn.setFixedHeight(32)
-        add_btn.clicked.connect(self.add_device_requested.emit)
-        header.addWidget(add_btn)
+        self._add_btn = QPushButton(t("dash.add_device"))
+        self._add_btn.setObjectName("btn_primary")
+        self._add_btn.setFixedHeight(32)
+        self._add_btn.clicked.connect(self.add_device_requested.emit)
+        header.addWidget(self._add_btn)
         layout.addLayout(header)
+
+        self._guide_label = QLabel(t("guide.dashboard"))
+        self._guide_label.setWordWrap(True)
+        self._guide_label.setStyleSheet(
+            f"font-size: {Fonts.SIZE_XS}px; color: {Colors.TEXT_MUTED}; background: transparent; padding-bottom: 4px;"
+        )
+        layout.addWidget(self._guide_label)
 
         self._summary = SummaryBar()
         layout.addWidget(self._summary)
@@ -495,13 +510,13 @@ class DashboardPanel(QWidget):
         graph_layout.setContentsMargins(12, 10, 12, 12)
         graph_layout.setSpacing(6)
 
-        self._graph_title = QLabel("RTT trend")
+        self._graph_title = QLabel(t("dash.rtt_trend"))
         self._graph_title.setStyleSheet(
             f"font-size: {Fonts.SIZE_MD}px; font-weight: 600; color: {Colors.TEXT_DIM}; background: transparent;"
         )
         graph_layout.addWidget(self._graph_title)
 
-        self._graph_subtitle = QLabel("The graph focuses on the selected device so latency changes are easier to read.")
+        self._graph_subtitle = QLabel(t("dash.rtt_subtitle"))
         self._graph_subtitle.setStyleSheet(
             f"font-size: {Fonts.SIZE_XS}px; color: {Colors.TEXT_MUTED}; background: transparent;"
         )
@@ -603,16 +618,14 @@ class DashboardPanel(QWidget):
                     break
 
         if not focus_id:
-            self._graph_title.setText("RTT trend")
-            self._graph_subtitle.setText("No latency samples yet.")
+            self._graph_title.setText(t("dash.rtt_trend"))
+            self._graph_subtitle.setText(t("dash.no_samples"))
             return
 
         history = rtt_history.get(focus_id, [])
         label = selected_device_name or focus_id
-        self._graph_title.setText(f"RTT trend - {label}")
-        self._graph_subtitle.setText(
-            "Missing points indicate failed pings. Focus stays on the selected device to reduce chart noise."
-        )
+        self._graph_title.setText(f"{t('dash.rtt_trend')} - {label}")
+        self._graph_subtitle.setText(t("dash.rtt_subtitle"))
 
         x_data = list(range(len(history)))
         y_data = [
@@ -625,6 +638,15 @@ class DashboardPanel(QWidget):
         if delay_threshold_ms:
             threshold_pen = pg.mkPen(color=Colors.WARNING, width=1, style=Qt.PenStyle.DashLine)
             self._graph.addItem(pg.InfiniteLine(pos=delay_threshold_ms, angle=0, pen=threshold_pen))
+
+    def retranslate(self):
+        self._title.setText(t("dash.title"))
+        self._guide_label.setText(t("guide.dashboard"))
+        self._add_btn.setText(t("dash.add_device"))
+        self._summary.retranslate()
+        self._graph_title.setText(t("dash.rtt_trend"))
+        self._graph_subtitle.setText(t("dash.rtt_subtitle"))
+        self._detail._scan_btn.setText(t("dash.open_scanner"))
 
     def _on_card_clicked(self, device_id):
         self.set_selected_device(device_id)

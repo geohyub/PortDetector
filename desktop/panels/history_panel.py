@@ -13,6 +13,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont, QColor
 
 from desktop.theme import Colors, Fonts
+from desktop.i18n import t
 from backend.utils.monitoring_presenter import (
     build_ports_text,
     build_status_reason,
@@ -23,17 +24,17 @@ from backend.utils.monitoring_presenter import (
 
 
 EVENT_FILTERS = [
-    ("All events", None),
-    ("Attention only", ["delayed", "disconnected"]),
-    ("Disconnects", ["disconnected"]),
-    ("High latency", ["delayed"]),
-    ("Recoveries", ["connected"]),
+    ("all_events", None),
+    ("attention_only", ["delayed", "disconnected"]),
+    ("disconnects", ["disconnected"]),
+    ("high_latency", ["delayed"]),
+    ("recoveries", ["connected"]),
 ]
 
 EVENT_LABELS = {
-    "connected": "Recovered",
-    "delayed": "High latency",
-    "disconnected": "Disconnected",
+    "connected": "event_connected",
+    "delayed": "event_delayed",
+    "disconnected": "event_disconnected",
 }
 
 SEVERITY_COLORS = {
@@ -58,49 +59,56 @@ class HistoryPanel(QWidget):
         layout.setSpacing(12)
 
         header = QHBoxLayout()
-        title = QLabel("Event History")
-        title.setStyleSheet(
+        self._title_label = QLabel(t("history.title"))
+        self._title_label.setStyleSheet(
             f"font-size: {Fonts.SIZE_XL}px; font-weight: 700; color: {Colors.TEXT}; background: transparent;"
         )
-        header.addWidget(title)
+        header.addWidget(self._title_label)
         header.addStretch()
 
-        filter_label = QLabel("Device:")
-        filter_label.setStyleSheet(
+        self._filter_label = QLabel(t("history.device"))
+        self._filter_label.setStyleSheet(
             f"font-size: {Fonts.SIZE_SM}px; color: {Colors.TEXT_DIM}; background: transparent;"
         )
-        header.addWidget(filter_label)
+        header.addWidget(self._filter_label)
 
         self._device_filter = QComboBox()
         self._device_filter.setFixedWidth(200)
-        self._device_filter.addItem("All devices", "")
+        self._device_filter.addItem(t("history.all_devices"), "")
         self._device_filter.currentIndexChanged.connect(self._refresh)
         header.addWidget(self._device_filter)
 
-        event_label = QLabel("Event:")
-        event_label.setStyleSheet(
+        self._event_label = QLabel(t("history.event"))
+        self._event_label.setStyleSheet(
             f"font-size: {Fonts.SIZE_SM}px; color: {Colors.TEXT_DIM}; background: transparent;"
         )
-        header.addWidget(event_label)
+        header.addWidget(self._event_label)
 
         self._event_filter = QComboBox()
         self._event_filter.setFixedWidth(170)
-        for label, event_list in EVENT_FILTERS:
-            self._event_filter.addItem(label, event_list)
+        for key, event_list in EVENT_FILTERS:
+            self._event_filter.addItem(t(f"history.{key}"), event_list)
         self._event_filter.currentIndexChanged.connect(self._refresh)
         header.addWidget(self._event_filter)
 
-        refresh_btn = QPushButton("Refresh")
-        refresh_btn.setFixedHeight(30)
-        refresh_btn.clicked.connect(self._refresh)
-        header.addWidget(refresh_btn)
+        self._refresh_btn = QPushButton(t("history.refresh"))
+        self._refresh_btn.setFixedHeight(30)
+        self._refresh_btn.clicked.connect(self._refresh)
+        header.addWidget(self._refresh_btn)
 
-        export_btn = QPushButton("Export CSV")
-        export_btn.setFixedHeight(30)
-        export_btn.clicked.connect(self._export_csv)
-        header.addWidget(export_btn)
+        self._export_btn = QPushButton(t("history.export_csv"))
+        self._export_btn.setFixedHeight(30)
+        self._export_btn.clicked.connect(self._export_csv)
+        header.addWidget(self._export_btn)
 
         layout.addLayout(header)
+
+        self._guide_label = QLabel(t("guide.history"))
+        self._guide_label.setWordWrap(True)
+        self._guide_label.setStyleSheet(
+            f"font-size: {Fonts.SIZE_XS}px; color: {Colors.TEXT_MUTED}; background: transparent; padding-bottom: 4px;"
+        )
+        layout.addWidget(self._guide_label)
 
         self._summary = QLabel("")
         self._summary.setWordWrap(True)
@@ -121,7 +129,8 @@ class HistoryPanel(QWidget):
         self._table = QTableWidget()
         self._table.setColumnCount(6)
         self._table.setHorizontalHeaderLabels([
-            "Timestamp", "Device", "Change", "Severity", "Why It Matters", "RTT (ms)",
+            t("history.col_timestamp"), t("history.col_device"), t("history.col_change"),
+            t("history.col_severity"), t("history.col_detail"), t("history.col_rtt"),
         ])
         self._table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self._table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
@@ -141,19 +150,19 @@ class HistoryPanel(QWidget):
 
         page_row = QHBoxLayout()
         page_row.addStretch()
-        self._page_label = QLabel("Page 1")
+        self._page_label = QLabel(t("history.page", n=1))
         self._page_label.setStyleSheet(
             f"font-size: {Fonts.SIZE_SM}px; color: {Colors.TEXT_DIM}; background: transparent;"
         )
         page_row.addWidget(self._page_label)
 
-        self._prev_btn = QPushButton("Prev")
+        self._prev_btn = QPushButton(t("history.prev"))
         self._prev_btn.setFixedWidth(60)
         self._prev_btn.setEnabled(False)
         self._prev_btn.clicked.connect(self._prev_page)
         page_row.addWidget(self._prev_btn)
 
-        self._next_btn = QPushButton("Next")
+        self._next_btn = QPushButton(t("history.next"))
         self._next_btn.setFixedWidth(60)
         self._next_btn.clicked.connect(self._next_page)
         page_row.addWidget(self._next_btn)
@@ -163,11 +172,41 @@ class HistoryPanel(QWidget):
         self._page = 0
         self._page_size = 100
 
+    def retranslate(self):
+        """Update all translatable strings to the current language."""
+        self._title_label.setText(t("history.title"))
+        self._guide_label.setText(t("guide.history"))
+        self._filter_label.setText(t("history.device"))
+        self._event_label.setText(t("history.event"))
+        self._refresh_btn.setText(t("history.refresh"))
+        self._export_btn.setText(t("history.export_csv"))
+        self._prev_btn.setText(t("history.prev"))
+        self._next_btn.setText(t("history.next"))
+        self._page_label.setText(t("history.page", n=self._page + 1))
+
+        # Re-populate event filter combo with translated labels
+        current_event_idx = self._event_filter.currentIndex()
+        self._event_filter.blockSignals(True)
+        self._event_filter.clear()
+        for key, event_list in EVENT_FILTERS:
+            self._event_filter.addItem(t(f"history.{key}"), event_list)
+        self._event_filter.setCurrentIndex(current_event_idx)
+        self._event_filter.blockSignals(False)
+
+        # Re-populate device filter (keep "All devices" translated)
+        self.refresh_device_filter()
+
+        # Update table headers
+        self._table.setHorizontalHeaderLabels([
+            t("history.col_timestamp"), t("history.col_device"), t("history.col_change"),
+            t("history.col_severity"), t("history.col_detail"), t("history.col_rtt"),
+        ])
+
     def refresh_device_filter(self):
         current = self._device_filter.currentData()
         self._device_filter.blockSignals(True)
         self._device_filter.clear()
-        self._device_filter.addItem("All devices", "")
+        self._device_filter.addItem(t("history.all_devices"), "")
         for dev in self._config_service.get_devices():
             label = f"{dev.name} ({dev.ip})"
             self._device_filter.addItem(label, dev.id)
@@ -217,24 +256,24 @@ class HistoryPanel(QWidget):
         delay_threshold = self._config_service.get_settings().get('delay_threshold_ms', 200)
         old_status = entry.get('old_status')
         if event == 'connected' and old_status in EVENT_LABELS:
-            reason = f"Recovered after {EVENT_LABELS[old_status].lower()}."
+            reason = build_status_reason(event, entry.get('rtt_ms'), delay_threshold)
         else:
             reason = entry.get('reason') or build_status_reason(event, entry.get('rtt_ms'), delay_threshold)
-        ports = entry.get('ports') or device_info.get('ports') or []
-        if event in ('delayed', 'disconnected') and ports:
-            reason = f"{reason} Reference ports: {build_ports_text(ports)}."
 
         device_name = entry.get('device_name') or device_info.get('name') or entry.get('device_id', '')
         ip = entry.get('ip') or device_info.get('ip', '')
         device_text = f"{device_name} ({ip})" if ip else device_name
 
+        event_label_key = EVENT_LABELS.get(event)
+        change_text = t(f"history.{event_label_key}") if event_label_key else event.title()
+
         return {
             'timestamp': entry.get('timestamp', ''),
             'device': device_text,
-            'change': EVENT_LABELS.get(event, event.title()),
+            'change': change_text,
             'severity': severity,
             'severity_label': severity_label(severity),
-            'detail': f"{importance_label(importance)} device. {reason}",
+            'detail': f"{importance_label(importance)}. {reason}",
             'rtt': entry.get('rtt_ms'),
         }
 
@@ -251,10 +290,11 @@ class HistoryPanel(QWidget):
                 counts[event] += 1
 
         self._summary.setText(
-            f"In current filter: {counts['total']:,} events | "
-            f"{counts['disconnected']:,} disconnects | "
-            f"{counts['delayed']:,} latency events | "
-            f"{counts['connected']:,} recoveries"
+            t("history.summary",
+              total=counts['total'],
+              disc=counts['disconnected'],
+              delayed=counts['delayed'],
+              conn=counts['connected'])
         )
 
     def _load_page(self):
@@ -272,7 +312,6 @@ class HistoryPanel(QWidget):
         self._update_summary(summary_entries)
 
         device_lookup = self._device_lookup()
-        mono = QFont(Fonts.MONO, Fonts.SIZE_SM)
         self._table.setRowCount(0)
 
         for entry in entries:
@@ -284,7 +323,6 @@ class HistoryPanel(QWidget):
             self._table.insertRow(row)
 
             ts_item = QTableWidgetItem(view['timestamp'])
-            ts_item.setFont(mono)
             self._table.setItem(row, 0, ts_item)
 
             self._table.setItem(row, 1, QTableWidgetItem(view['device']))
@@ -303,10 +341,9 @@ class HistoryPanel(QWidget):
             rtt = view['rtt']
             rtt_item = QTableWidgetItem(f"{rtt:,}" if rtt is not None else "--")
             rtt_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-            rtt_item.setFont(mono)
             self._table.setItem(row, 5, rtt_item)
 
-        self._page_label.setText(f"Page {self._page + 1}")
+        self._page_label.setText(t("history.page", n=self._page + 1))
         self._prev_btn.setEnabled(self._page > 0)
         self._next_btn.setEnabled(len(entries) == self._page_size)
 
@@ -329,7 +366,10 @@ class HistoryPanel(QWidget):
 
         with open(path, 'w', newline='', encoding='utf-8') as f:
             writer = csv.writer(f)
-            writer.writerow(["Timestamp", "Device", "Change", "Severity", "Why It Matters", "RTT (ms)"])
+            writer.writerow([
+                t("history.col_timestamp"), t("history.col_device"), t("history.col_change"),
+                t("history.col_severity"), t("history.col_detail"), t("history.col_rtt"),
+            ])
             for entry in entries:
                 view = self._build_entry_view(entry, device_lookup)
                 writer.writerow([

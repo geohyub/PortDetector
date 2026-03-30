@@ -119,8 +119,27 @@ def cleanup():
 
 atexit.register(cleanup)
 
+def _is_port_in_use(port: int) -> bool:
+    """Check if a TCP port is already bound (another instance likely running)."""
+    import socket
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        try:
+            s.bind(('127.0.0.1', port))
+            return False
+        except OSError:
+            return True
+
+
 if __name__ == '__main__':
     port = settings.get('web_port', DEFAULT_WEB_PORT)
+
+    # ── Single instance guard (web mode) ──
+    if _is_port_in_use(port):
+        print(f"[WARN] Port {port} is already in use. "
+              f"Another PortDetector instance may be running.")
+        print(f"Opening browser to existing instance...")
+        webbrowser.open(f"http://127.0.0.1:{port}")
+        sys.exit(0)
 
     # Start traffic capture (admin only, graceful fallback)
     traffic_service.start()

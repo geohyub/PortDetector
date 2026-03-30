@@ -7,6 +7,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt
 
 from desktop.theme import Colors, Fonts
+from desktop.i18n import t
 
 
 CATEGORIES = [
@@ -40,7 +41,7 @@ class DeviceDialog(QDialog):
         super().__init__(parent)
         self._device_data = device_data
         self._is_edit = device_data is not None
-        self.setWindowTitle("Edit Device" if self._is_edit else "Add Device")
+        self.setWindowTitle(t("device.edit_title") if self._is_edit else t("device.add_title"))
         self.setFixedWidth(420)
         self.setStyleSheet(f"""
             QDialog {{
@@ -70,9 +71,9 @@ class DeviceDialog(QDialog):
         layout.setSpacing(12)
         layout.setContentsMargins(20, 16, 20, 16)
 
-        title = QLabel("Edit Device" if self._is_edit else "Add Device")
-        title.setObjectName("dialog_title")
-        layout.addWidget(title)
+        self._dialog_title = QLabel(t("device.edit_title") if self._is_edit else t("device.add_title"))
+        self._dialog_title.setObjectName("dialog_title")
+        layout.addWidget(self._dialog_title)
 
         form = QFormLayout()
         form.setSpacing(8)
@@ -80,30 +81,36 @@ class DeviceDialog(QDialog):
 
         self._name_input = QLineEdit()
         self._name_input.setPlaceholderText("e.g. GPS Server")
-        form.addRow("Name:", self._name_input)
+        self._name_label = QLabel(t("device.name"))
+        form.addRow(self._name_label, self._name_input)
 
         self._ip_input = QLineEdit()
         self._ip_input.setPlaceholderText("e.g. 192.168.1.100")
-        form.addRow("IP:", self._ip_input)
+        self._ip_label = QLabel(t("device.ip"))
+        form.addRow(self._ip_label, self._ip_input)
 
         self._ports_input = QLineEdit()
         self._ports_input.setPlaceholderText("e.g. 80,443,8080-8090")
-        form.addRow("Ports:", self._ports_input)
+        self._ports_label = QLabel(t("device.ports"))
+        form.addRow(self._ports_label, self._ports_input)
 
         self._category_combo = QComboBox()
         self._category_combo.addItems(CATEGORIES)
-        form.addRow("Category:", self._category_combo)
+        self._category_label = QLabel(t("device.category"))
+        form.addRow(self._category_label, self._category_combo)
 
         self._importance_combo = QComboBox()
         for label, value in IMPORTANCE_OPTIONS:
             self._importance_combo.addItem(label, value)
-        form.addRow("Importance:", self._importance_combo)
+        self._importance_label = QLabel(t("device.importance"))
+        form.addRow(self._importance_label, self._importance_combo)
 
         self._desc_input = QLineEdit()
         self._desc_input.setPlaceholderText("Optional description")
-        form.addRow("Description:", self._desc_input)
+        self._desc_label = QLabel(t("device.description"))
+        form.addRow(self._desc_label, self._desc_input)
 
-        self._enabled_check = QCheckBox("Monitoring enabled")
+        self._enabled_check = QCheckBox(t("device.monitoring_enabled"))
         self._enabled_check.setChecked(True)
         form.addRow("", self._enabled_check)
 
@@ -118,14 +125,14 @@ class DeviceDialog(QDialog):
         btn_row = QHBoxLayout()
         btn_row.addStretch()
 
-        cancel_btn = QPushButton("Cancel")
-        cancel_btn.clicked.connect(self.reject)
-        btn_row.addWidget(cancel_btn)
+        self._cancel_btn = QPushButton(t("device.cancel"))
+        self._cancel_btn.clicked.connect(self.reject)
+        btn_row.addWidget(self._cancel_btn)
 
-        save_btn = QPushButton("Save" if self._is_edit else "Add")
-        save_btn.setObjectName("btn_primary")
-        save_btn.clicked.connect(self._on_save)
-        btn_row.addWidget(save_btn)
+        self._save_btn = QPushButton(t("device.save") if self._is_edit else t("device.add"))
+        self._save_btn.setObjectName("btn_primary")
+        self._save_btn.clicked.connect(self._on_save)
+        btn_row.addWidget(self._save_btn)
 
         layout.addLayout(btn_row)
 
@@ -151,10 +158,10 @@ class DeviceDialog(QDialog):
         ports_str = self._ports_input.text().strip()
 
         if not name:
-            self._show_error("Name is required")
+            self._show_error(t("device.name_required"))
             return
         if not ip:
-            self._show_error("IP address is required")
+            self._show_error(t("device.ip_required"))
             return
 
         # Parse ports

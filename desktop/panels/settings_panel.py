@@ -13,12 +13,14 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, Signal
 
 from desktop.theme import Colors, Fonts
+from desktop.i18n import t, get_language
 
 
 class SettingsPanel(QWidget):
     settings_changed = Signal(dict)
     profile_loaded = Signal()     # devices changed
     preset_loaded = Signal()      # devices changed from preset
+    language_changed = Signal(str)
 
     def __init__(self, config_service, profile_service, backup_service, parent=None):
         super().__init__(parent)
@@ -39,58 +41,83 @@ class SettingsPanel(QWidget):
         layout.setContentsMargins(16, 12, 16, 12)
         layout.setSpacing(16)
 
-        title = QLabel("Settings")
-        title.setStyleSheet(f"font-size: {Fonts.SIZE_XL}px; font-weight: 600; color: {Colors.TEXT}; background: transparent;")
-        layout.addWidget(title)
+        self._title = QLabel(t("settings.title"))
+        self._title.setStyleSheet(f"font-size: {Fonts.SIZE_XL}px; font-weight: 600; color: {Colors.TEXT}; background: transparent;")
+        layout.addWidget(self._title)
+
+        self._guide_label = QLabel(t("guide.settings"))
+        self._guide_label.setWordWrap(True)
+        self._guide_label.setStyleSheet(
+            f"font-size: {Fonts.SIZE_XS}px; color: {Colors.TEXT_MUTED}; background: transparent; padding-bottom: 4px;"
+        )
+        layout.addWidget(self._guide_label)
+
+        # ── Language ──
+        self._lang_group = QGroupBox(t("settings.language"))
+        lang_layout = QHBoxLayout(self._lang_group)
+        self._lang_combo = QComboBox()
+        self._lang_combo.addItem(t("settings.lang_ko"), "ko")
+        self._lang_combo.addItem(t("settings.lang_en"), "en")
+        current_lang = get_language()
+        idx = self._lang_combo.findData(current_lang)
+        if idx >= 0:
+            self._lang_combo.setCurrentIndex(idx)
+        self._lang_combo.currentIndexChanged.connect(self._on_language_changed)
+        lang_layout.addWidget(self._lang_combo)
+        lang_layout.addStretch()
+        layout.addWidget(self._lang_group)
 
         # ── Monitoring ──
-        monitor_group = QGroupBox("Monitoring")
-        monitor_form = QFormLayout(monitor_group)
+        self._monitor_group = QGroupBox(t("settings.monitoring"))
+        monitor_form = QFormLayout(self._monitor_group)
         monitor_form.setSpacing(8)
 
         self._ping_interval = QSpinBox()
         self._ping_interval.setRange(1, 60)
         self._ping_interval.setSuffix(" sec")
-        monitor_form.addRow("Ping Interval:", self._ping_interval)
+        self._ping_interval_label = QLabel(t("settings.ping_interval"))
+        monitor_form.addRow(self._ping_interval_label, self._ping_interval)
 
         self._interface_poll = QSpinBox()
         self._interface_poll.setRange(1, 30)
         self._interface_poll.setSuffix(" sec")
-        monitor_form.addRow("Interface Poll:", self._interface_poll)
+        self._interface_poll_label = QLabel(t("settings.interface_poll"))
+        monitor_form.addRow(self._interface_poll_label, self._interface_poll)
 
         self._delay_threshold = QSpinBox()
         self._delay_threshold.setRange(10, 5000)
         self._delay_threshold.setSuffix(" ms")
-        monitor_form.addRow("Delay Threshold:", self._delay_threshold)
+        self._delay_threshold_label = QLabel(t("settings.delay_threshold"))
+        monitor_form.addRow(self._delay_threshold_label, self._delay_threshold)
 
-        layout.addWidget(monitor_group)
+        layout.addWidget(self._monitor_group)
 
         # ── Alerts ──
-        alert_group = QGroupBox("Alerts")
-        alert_form = QFormLayout(alert_group)
+        self._alert_group = QGroupBox(t("settings.alerts"))
+        alert_form = QFormLayout(self._alert_group)
         alert_form.setSpacing(8)
 
-        self._alert_enabled = QCheckBox("Enable status change alerts")
+        self._alert_enabled = QCheckBox(t("settings.alert_enabled"))
         alert_form.addRow(self._alert_enabled)
 
-        self._sound_enabled = QCheckBox("Sound alert on disconnect")
+        self._sound_enabled = QCheckBox(t("settings.sound_enabled"))
         self._sound_enabled.setChecked(True)
         alert_form.addRow(self._sound_enabled)
 
-        self._escalation_enabled = QCheckBox("Escalation (louder after 3/10 consecutive failures)")
+        self._escalation_enabled = QCheckBox(t("settings.escalation"))
         self._escalation_enabled.setChecked(True)
         alert_form.addRow(self._escalation_enabled)
 
-        layout.addWidget(alert_group)
+        layout.addWidget(self._alert_group)
 
         # ── Vessel Presets ──
-        preset_group = QGroupBox("Vessel Presets")
-        preset_layout = QVBoxLayout(preset_group)
+        self._preset_group = QGroupBox(t("settings.vessel_presets"))
+        preset_layout = QVBoxLayout(self._preset_group)
         preset_layout.setSpacing(8)
 
-        preset_desc = QLabel("Load a preset device configuration for your vessel type.")
-        preset_desc.setStyleSheet(f"font-size: {Fonts.SIZE_SM}px; color: {Colors.TEXT_DIM}; background: transparent;")
-        preset_layout.addWidget(preset_desc)
+        self._preset_desc = QLabel(t("settings.preset_desc"))
+        self._preset_desc.setStyleSheet(f"font-size: {Fonts.SIZE_SM}px; color: {Colors.TEXT_DIM}; background: transparent;")
+        preset_layout.addWidget(self._preset_desc)
 
         preset_row = QHBoxLayout()
         self._preset_combo = QComboBox()
@@ -98,50 +125,50 @@ class SettingsPanel(QWidget):
         self._refresh_presets()
         preset_row.addWidget(self._preset_combo)
 
-        load_preset_btn = QPushButton("Load Preset")
-        load_preset_btn.setObjectName("btn_primary")
-        load_preset_btn.setFixedHeight(30)
-        load_preset_btn.clicked.connect(self._load_preset)
-        preset_row.addWidget(load_preset_btn)
+        self._load_preset_btn = QPushButton(t("settings.load_preset"))
+        self._load_preset_btn.setObjectName("btn_primary")
+        self._load_preset_btn.setFixedHeight(30)
+        self._load_preset_btn.clicked.connect(self._load_preset)
+        preset_row.addWidget(self._load_preset_btn)
 
-        import_yaml_btn = QPushButton("Import YAML")
-        import_yaml_btn.setFixedHeight(30)
-        import_yaml_btn.clicked.connect(self._import_preset_yaml)
-        preset_row.addWidget(import_yaml_btn)
+        self._import_yaml_btn = QPushButton(t("settings.import_yaml"))
+        self._import_yaml_btn.setFixedHeight(30)
+        self._import_yaml_btn.clicked.connect(self._import_preset_yaml)
+        preset_row.addWidget(self._import_yaml_btn)
 
         preset_row.addStretch()
         preset_layout.addLayout(preset_row)
 
-        layout.addWidget(preset_group)
+        layout.addWidget(self._preset_group)
 
         # ── Profiles ──
-        profile_group = QGroupBox("Project Profiles")
-        profile_layout = QVBoxLayout(profile_group)
+        self._profile_group = QGroupBox(t("settings.profiles"))
+        profile_layout = QVBoxLayout(self._profile_group)
         profile_layout.setSpacing(8)
 
-        profile_desc = QLabel("Save/load device configurations for different projects or vessels.")
-        profile_desc.setStyleSheet(f"font-size: {Fonts.SIZE_SM}px; color: {Colors.TEXT_DIM}; background: transparent;")
-        profile_layout.addWidget(profile_desc)
+        self._profile_desc = QLabel(t("settings.profile_desc"))
+        self._profile_desc.setStyleSheet(f"font-size: {Fonts.SIZE_SM}px; color: {Colors.TEXT_DIM}; background: transparent;")
+        profile_layout.addWidget(self._profile_desc)
 
         # Save profile
         save_row = QHBoxLayout()
         save_row.setSpacing(6)
 
         self._profile_name_input = QLineEdit()
-        self._profile_name_input.setPlaceholderText("Profile name (e.g. Orsted Vessel A)")
+        self._profile_name_input.setPlaceholderText(t("settings.profile_name"))
         self._profile_name_input.setMinimumWidth(200)
         save_row.addWidget(self._profile_name_input)
 
         self._vessel_input = QLineEdit()
-        self._vessel_input.setPlaceholderText("Vessel name (optional)")
+        self._vessel_input.setPlaceholderText(t("settings.vessel_name"))
         self._vessel_input.setFixedWidth(160)
         save_row.addWidget(self._vessel_input)
 
-        save_profile_btn = QPushButton("Save Current")
-        save_profile_btn.setObjectName("btn_primary")
-        save_profile_btn.setFixedHeight(30)
-        save_profile_btn.clicked.connect(self._save_profile)
-        save_row.addWidget(save_profile_btn)
+        self._save_profile_btn = QPushButton(t("settings.save_current"))
+        self._save_profile_btn.setObjectName("btn_primary")
+        self._save_profile_btn.setFixedHeight(30)
+        self._save_profile_btn.clicked.connect(self._save_profile)
+        save_row.addWidget(self._save_profile_btn)
 
         save_row.addStretch()
         profile_layout.addLayout(save_row)
@@ -155,34 +182,31 @@ class SettingsPanel(QWidget):
         self._refresh_profiles()
         load_row.addWidget(self._profile_combo)
 
-        load_profile_btn = QPushButton("Load")
-        load_profile_btn.setFixedHeight(30)
-        load_profile_btn.clicked.connect(self._load_profile)
-        load_row.addWidget(load_profile_btn)
+        self._load_profile_btn = QPushButton(t("settings.load"))
+        self._load_profile_btn.setFixedHeight(30)
+        self._load_profile_btn.clicked.connect(self._load_profile)
+        load_row.addWidget(self._load_profile_btn)
 
-        del_profile_btn = QPushButton("Delete")
-        del_profile_btn.setObjectName("btn_danger")
-        del_profile_btn.setFixedHeight(30)
-        del_profile_btn.clicked.connect(self._delete_profile)
-        load_row.addWidget(del_profile_btn)
+        self._del_profile_btn = QPushButton(t("settings.delete"))
+        self._del_profile_btn.setObjectName("btn_danger")
+        self._del_profile_btn.setFixedHeight(30)
+        self._del_profile_btn.clicked.connect(self._delete_profile)
+        load_row.addWidget(self._del_profile_btn)
 
         load_row.addStretch()
         profile_layout.addLayout(load_row)
 
-        layout.addWidget(profile_group)
+        layout.addWidget(self._profile_group)
 
         # ── Safety Backups ──
-        backup_group = QGroupBox("Safety Backups")
-        backup_layout = QVBoxLayout(backup_group)
+        self._backup_group = QGroupBox(t("settings.safety_backups"))
+        backup_layout = QVBoxLayout(self._backup_group)
         backup_layout.setSpacing(8)
 
-        backup_desc = QLabel(
-            "A backup is created before preset/profile/config replacement. "
-            "You can also create and restore backups manually."
-        )
-        backup_desc.setWordWrap(True)
-        backup_desc.setStyleSheet(f"font-size: {Fonts.SIZE_SM}px; color: {Colors.TEXT_DIM}; background: transparent;")
-        backup_layout.addWidget(backup_desc)
+        self._backup_desc = QLabel(t("settings.backup_desc"))
+        self._backup_desc.setWordWrap(True)
+        self._backup_desc.setStyleSheet(f"font-size: {Fonts.SIZE_SM}px; color: {Colors.TEXT_DIM}; background: transparent;")
+        backup_layout.addWidget(self._backup_desc)
 
         self._backup_status = QLabel("")
         self._backup_status.setWordWrap(True)
@@ -196,51 +220,51 @@ class SettingsPanel(QWidget):
         self._backup_combo.setMinimumWidth(320)
         backup_row.addWidget(self._backup_combo)
 
-        refresh_backup_btn = QPushButton("Refresh")
-        refresh_backup_btn.setFixedHeight(30)
-        refresh_backup_btn.clicked.connect(self._refresh_backups)
-        backup_row.addWidget(refresh_backup_btn)
+        self._refresh_backup_btn = QPushButton(t("settings.refresh"))
+        self._refresh_backup_btn.setFixedHeight(30)
+        self._refresh_backup_btn.clicked.connect(self._refresh_backups)
+        backup_row.addWidget(self._refresh_backup_btn)
 
-        create_backup_btn = QPushButton("Create Backup")
-        create_backup_btn.setFixedHeight(30)
-        create_backup_btn.clicked.connect(self._create_manual_backup)
-        backup_row.addWidget(create_backup_btn)
+        self._create_backup_btn = QPushButton(t("settings.create_backup"))
+        self._create_backup_btn.setFixedHeight(30)
+        self._create_backup_btn.clicked.connect(self._create_manual_backup)
+        backup_row.addWidget(self._create_backup_btn)
 
-        restore_backup_btn = QPushButton("Restore")
-        restore_backup_btn.setObjectName("btn_primary")
-        restore_backup_btn.setFixedHeight(30)
-        restore_backup_btn.clicked.connect(self._restore_backup)
-        backup_row.addWidget(restore_backup_btn)
+        self._restore_backup_btn = QPushButton(t("settings.restore"))
+        self._restore_backup_btn.setObjectName("btn_primary")
+        self._restore_backup_btn.setFixedHeight(30)
+        self._restore_backup_btn.clicked.connect(self._restore_backup)
+        backup_row.addWidget(self._restore_backup_btn)
 
         backup_row.addStretch()
         backup_layout.addLayout(backup_row)
-        layout.addWidget(backup_group)
+        layout.addWidget(self._backup_group)
 
         # ── Config Import/Export ──
-        config_group = QGroupBox("Configuration")
-        config_layout = QHBoxLayout(config_group)
+        self._config_group = QGroupBox(t("settings.configuration"))
+        config_layout = QHBoxLayout(self._config_group)
         config_layout.setSpacing(8)
 
-        import_btn = QPushButton("Import Config")
-        import_btn.clicked.connect(self._import_config)
-        config_layout.addWidget(import_btn)
+        self._import_btn = QPushButton(t("settings.import_config"))
+        self._import_btn.clicked.connect(self._import_config)
+        config_layout.addWidget(self._import_btn)
 
-        export_btn = QPushButton("Export Config")
-        export_btn.clicked.connect(self._export_config)
-        config_layout.addWidget(export_btn)
+        self._export_btn = QPushButton(t("settings.export_config"))
+        self._export_btn.clicked.connect(self._export_config)
+        config_layout.addWidget(self._export_btn)
 
         config_layout.addStretch()
-        layout.addWidget(config_group)
+        layout.addWidget(self._config_group)
 
         # ── Save button ──
         btn_row = QHBoxLayout()
         btn_row.addStretch()
 
-        save_btn = QPushButton("Save Settings")
-        save_btn.setObjectName("btn_primary")
-        save_btn.setFixedHeight(34)
-        save_btn.clicked.connect(self._save_settings)
-        btn_row.addWidget(save_btn)
+        self._save_btn = QPushButton(t("settings.save_settings"))
+        self._save_btn.setObjectName("btn_primary")
+        self._save_btn.setFixedHeight(34)
+        self._save_btn.clicked.connect(self._save_settings)
+        btn_row.addWidget(self._save_btn)
 
         layout.addLayout(btn_row)
         layout.addStretch()
@@ -252,6 +276,11 @@ class SettingsPanel(QWidget):
         outer.addWidget(scroll)
 
         self._refresh_backups()
+
+    # ── Language ──
+
+    def _on_language_changed(self):
+        self.language_changed.emit(self._lang_combo.currentData())
 
     # ── Settings ──
 
@@ -291,7 +320,7 @@ class SettingsPanel(QWidget):
 
         self._backup_combo.blockSignals(True)
         self._backup_combo.clear()
-        self._backup_combo.addItem("Select backup to restore", "")
+        self._backup_combo.addItem(t("settings.select_backup"), "")
         for backup in backups:
             label = f"{backup['created']} | {backup['source']} ({backup['device_count']} dev)"
             self._backup_combo.addItem(label, backup['filename'])
@@ -309,7 +338,7 @@ class SettingsPanel(QWidget):
                 f"{latest['device_count']} device(s)"
             )
         else:
-            self._backup_status.setText("No backups created yet.")
+            self._backup_status.setText(t("common.no_backup"))
 
     def _create_restore_point(self, source: str, note: str):
         backup = self._backup_service.create_backup(
@@ -443,7 +472,7 @@ class SettingsPanel(QWidget):
 
     def _import_preset_yaml(self):
         path, _ = QFileDialog.getOpenFileName(
-            self, "Import Preset YAML", "", "YAML Files (*.yaml *.yml)"
+            self, t("settings.import_yaml"), "", "YAML Files (*.yaml *.yml)"
         )
         if not path:
             return
@@ -454,7 +483,7 @@ class SettingsPanel(QWidget):
         dest = os.path.join(presets_dir, os.path.basename(path))
         shutil.copy2(path, dest)
         self._refresh_presets()
-        QMessageBox.information(self, "Import", "Preset YAML imported. Select it from the dropdown.")
+        QMessageBox.information(self, t("common.import"), "Preset YAML imported. Select it from the dropdown.")
 
     # ── Profiles ──
 
@@ -535,7 +564,7 @@ class SettingsPanel(QWidget):
 
     def _import_config(self):
         path, _ = QFileDialog.getOpenFileName(
-            self, "Import Configuration", "", "JSON Files (*.json)"
+            self, t("settings.import_config"), "", "JSON Files (*.json)"
         )
         if not path:
             return
@@ -551,16 +580,16 @@ class SettingsPanel(QWidget):
             self.profile_loaded.emit()
             QMessageBox.information(
                 self,
-                "Import",
+                t("common.import"),
                 "Configuration imported successfully.\n"
                 f"Backup created: {restore_point['filename']}",
             )
         except Exception as e:
-            QMessageBox.warning(self, "Import Error", str(e))
+            QMessageBox.warning(self, t("common.error"), str(e))
 
     def _export_config(self):
         path, _ = QFileDialog.getSaveFileName(
-            self, "Export Configuration", "portdetector_config.json", "JSON Files (*.json)"
+            self, t("settings.export_config"), "portdetector_config.json", "JSON Files (*.json)"
         )
         if not path:
             return
@@ -568,6 +597,68 @@ class SettingsPanel(QWidget):
             config = self._config_service.export_config()
             with open(path, 'w', encoding='utf-8') as f:
                 json.dump(config, f, indent=2, ensure_ascii=False)
-            QMessageBox.information(self, "Export", "Configuration exported successfully.")
+            QMessageBox.information(self, t("common.export"), "Configuration exported successfully.")
         except Exception as e:
-            QMessageBox.warning(self, "Export Error", str(e))
+            QMessageBox.warning(self, t("common.error"), str(e))
+
+    def retranslate(self):
+        """Update all translatable strings to the current language."""
+        self._title.setText(t("settings.title"))
+        self._guide_label.setText(t("guide.settings"))
+
+        # Language group
+        self._lang_group.setTitle(t("settings.language"))
+        self._lang_combo.blockSignals(True)
+        current_data = self._lang_combo.currentData()
+        self._lang_combo.clear()
+        self._lang_combo.addItem(t("settings.lang_ko"), "ko")
+        self._lang_combo.addItem(t("settings.lang_en"), "en")
+        idx = self._lang_combo.findData(current_data)
+        if idx >= 0:
+            self._lang_combo.setCurrentIndex(idx)
+        self._lang_combo.blockSignals(False)
+
+        # Monitoring
+        self._monitor_group.setTitle(t("settings.monitoring"))
+        self._ping_interval_label.setText(t("settings.ping_interval"))
+        self._interface_poll_label.setText(t("settings.interface_poll"))
+        self._delay_threshold_label.setText(t("settings.delay_threshold"))
+
+        # Alerts
+        self._alert_group.setTitle(t("settings.alerts"))
+        self._alert_enabled.setText(t("settings.alert_enabled"))
+        self._sound_enabled.setText(t("settings.sound_enabled"))
+        self._escalation_enabled.setText(t("settings.escalation"))
+
+        # Vessel Presets
+        self._preset_group.setTitle(t("settings.vessel_presets"))
+        self._preset_desc.setText(t("settings.preset_desc"))
+        self._load_preset_btn.setText(t("settings.load_preset"))
+        self._import_yaml_btn.setText(t("settings.import_yaml"))
+
+        # Profiles
+        self._profile_group.setTitle(t("settings.profiles"))
+        self._profile_desc.setText(t("settings.profile_desc"))
+        self._profile_name_input.setPlaceholderText(t("settings.profile_name"))
+        self._vessel_input.setPlaceholderText(t("settings.vessel_name"))
+        self._save_profile_btn.setText(t("settings.save_current"))
+        self._load_profile_btn.setText(t("settings.load"))
+        self._del_profile_btn.setText(t("settings.delete"))
+
+        # Backups
+        self._backup_group.setTitle(t("settings.safety_backups"))
+        self._backup_desc.setText(t("settings.backup_desc"))
+        self._refresh_backup_btn.setText(t("settings.refresh"))
+        self._create_backup_btn.setText(t("settings.create_backup"))
+        self._restore_backup_btn.setText(t("settings.restore"))
+
+        # Config
+        self._config_group.setTitle(t("settings.configuration"))
+        self._import_btn.setText(t("settings.import_config"))
+        self._export_btn.setText(t("settings.export_config"))
+
+        # Save button
+        self._save_btn.setText(t("settings.save_settings"))
+
+        # Refresh backup combo placeholder
+        self._refresh_backups()

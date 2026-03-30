@@ -5,30 +5,16 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Iterable
 
+from desktop.i18n import t
+
 
 IMPORTANCE_LEVELS = ("critical", "high", "standard", "optional")
-
-IMPORTANCE_LABELS = {
-    "critical": "Critical",
-    "high": "Important",
-    "standard": "Standard",
-    "optional": "Optional",
-}
 
 IMPORTANCE_WEIGHTS = {
     "critical": 4,
     "high": 3,
     "standard": 2,
     "optional": 1,
-}
-
-SEVERITY_LABELS = {
-    "stable": "Stable",
-    "info": "Info",
-    "advisory": "Advisory",
-    "warning": "Warning",
-    "critical": "Critical",
-    "emergency": "Emergency",
 }
 
 SEVERITY_ORDER = {
@@ -47,7 +33,8 @@ def normalize_importance(value: str | None) -> str:
 
 
 def importance_label(value: str | None) -> str:
-    return IMPORTANCE_LABELS[normalize_importance(value)]
+    key = normalize_importance(value)
+    return t(f"importance.{key}")
 
 
 def importance_weight(value: str | None) -> int:
@@ -55,7 +42,8 @@ def importance_weight(value: str | None) -> int:
 
 
 def severity_label(value: str | None) -> str:
-    return SEVERITY_LABELS.get(value or "", "Info")
+    key = value or "info"
+    return t(f"severity.{key}")
 
 
 def severity_rank(value: str | None) -> int:
@@ -65,68 +53,58 @@ def severity_rank(value: str | None) -> int:
 def build_status_label(status: str | None) -> str:
     status = (status or "unknown").lower()
     if status == "connected":
-        return "Stable"
+        return t("status.connected")
     if status == "delayed":
-        return "High latency"
+        return t("status.delayed")
     if status == "disconnected":
-        return "No response"
-    return "Waiting for data"
+        return t("status.disconnected")
+    return t("status.waiting")
 
 
 def build_status_reason(status: str | None, rtt_ms: int | None, delay_threshold_ms: int) -> str:
     status = (status or "unknown").lower()
     if status == "connected":
         if rtt_ms is not None:
-            return f"Ping responded in {rtt_ms:,} ms."
-        return "Ping responded normally."
+            return t("reason.connected", rtt=f"{rtt_ms:,}")
+        return t("reason.connected_ok")
     if status == "delayed":
         if rtt_ms is not None:
-            return (
-                f"Ping responded in {rtt_ms:,} ms, above the "
-                f"{delay_threshold_ms:,} ms delay threshold."
-            )
-        return f"Response arrived slower than the {delay_threshold_ms:,} ms delay threshold."
+            return t("reason.delayed", rtt=f"{rtt_ms:,}", threshold=f"{delay_threshold_ms:,}")
+        return t("reason.delayed_no_rtt", threshold=f"{delay_threshold_ms:,}")
     if status == "disconnected":
-        return "No ping reply was received during the latest monitoring cycle."
-    return "Waiting for the first monitoring result."
+        return t("reason.disconnected")
+    return t("reason.unknown")
 
 
 def build_ports_text(ports: Iterable[int] | None) -> str:
     ports = list(ports or [])
     if not ports:
-        return "No reference ports"
+        return t("report.no_ports")
     return ", ".join(str(port) for port in ports)
 
 
 def build_action_text(status: str | None, ports: Iterable[int] | None, fail_count: int) -> str:
     status = (status or "unknown").lower()
-    port_text = build_ports_text(ports)
+    port_list = list(ports or [])
+    port_text = ", ".join(str(p) for p in port_list)
+
     if status == "connected":
-        if ports:
-            return (
-                f"Host reachability is healthy. If the application still feels down, "
-                f"open Scanner and verify reference ports {port_text}."
-            )
-        return "Reachability is healthy. Keep observing only if operators still report intermittent issues."
+        if port_list:
+            return t("action.connected_ports", ports=port_text)
+        return t("action.connected_no_ports")
     if status == "delayed":
         if fail_count >= 3:
-            if ports:
-                return (
-                    f"Latency has stayed high for several checks. Review interface load and "
-                    f"verify reference ports {port_text} before escalating."
-                )
-            return "Latency has stayed high for several checks. Review interface load before escalating."
-        if ports:
-            return f"Watch another cycle or verify reference ports {port_text} if the service feels unstable."
-        return "Watch another cycle before escalating."
+            if port_list:
+                return t("action.delayed_long_ports", ports=port_text)
+            return t("action.delayed_long_no_ports")
+        if port_list:
+            return t("action.delayed_short_ports", ports=port_text)
+        return t("action.delayed_short_no_ports")
     if status == "disconnected":
-        if ports:
-            return (
-                f"Check power, cabling, routing, or VPN first. Once ping recovers, verify "
-                f"reference ports {port_text}."
-            )
-        return "Check power, cabling, routing, or VPN state first."
-    return "Waiting for monitoring data."
+        if port_list:
+            return t("action.disconnected_ports", ports=port_text)
+        return t("action.disconnected_no_ports")
+    return t("action.waiting")
 
 
 def derive_runtime_severity(status: str | None, importance: str | None, fail_count: int) -> str:
@@ -197,16 +175,16 @@ def build_report_reason(
     status_changes: int,
     delay_threshold_ms: int,
 ) -> str:
-    parts = [f"{uptime_pct:.1f}% uptime"]
+    parts = [t("report.uptime", pct=f"{uptime_pct:.1f}")]
     if disconnects:
-        parts.append(f"{disconnects} disconnect(s)")
+        parts.append(t("report.disconnects", n=disconnects))
     if avg_rtt is not None:
         if avg_rtt > delay_threshold_ms:
-            parts.append(f"average RTT {avg_rtt:,.1f} ms above threshold")
+            parts.append(t("report.avg_rtt_above", rtt=f"{avg_rtt:,.1f}"))
         else:
-            parts.append(f"average RTT {avg_rtt:,.1f} ms")
+            parts.append(t("report.avg_rtt_normal", rtt=f"{avg_rtt:,.1f}"))
     if status_changes:
-        parts.append(f"{status_changes} state changes")
+        parts.append(t("report.state_changes", n=status_changes))
     return ", ".join(parts) + "."
 
 
@@ -217,27 +195,25 @@ def build_report_action(
     avg_rtt: float | None,
     delay_threshold_ms: int,
 ) -> str:
-    port_text = build_ports_text(ports)
+    port_list = list(ports or [])
+    port_text = ", ".join(str(p) for p in port_list)
 
     if severity == "stable":
-        return "No immediate action. Keep this device in normal monitoring."
+        return t("report.action_stable")
 
     if avg_rtt is not None and avg_rtt > delay_threshold_ms and disconnects == 0:
-        if ports:
-            return f"Watch latency and verify reference ports {port_text} if operators feel service slowdown."
-        return "Watch latency trend and review interface load if operators feel slowdown."
+        if port_list:
+            return t("report.action_latency", ports=port_text)
+        return t("report.action_latency_no_ports")
 
-    if ports:
-        return (
-            f"Review the disconnect windows first, then verify reference ports {port_text} "
-            f"once host reachability is stable."
-        )
-    return "Review repeated disconnect windows and upstream network/power state."
+    if port_list:
+        return t("report.action_disconnects", ports=port_text)
+    return t("report.action_disconnects_no_ports")
 
 
 def format_relative_time(timestamp: str | None, now: datetime | None = None) -> str:
     if not timestamp:
-        return "No recent change"
+        return t("time.no_change")
 
     try:
         ts = datetime.fromisoformat(timestamp)
@@ -247,14 +223,14 @@ def format_relative_time(timestamp: str | None, now: datetime | None = None) -> 
     now = now or datetime.now()
     seconds = max(int((now - ts).total_seconds()), 0)
     if seconds < 10:
-        return "Changed just now"
+        return t("time.just_now")
     if seconds < 60:
-        return f"Changed {seconds} sec ago"
+        return t("time.sec_ago", n=seconds)
     minutes = seconds // 60
     if minutes < 60:
-        return f"Changed {minutes} min ago"
+        return t("time.min_ago", n=minutes)
     hours = minutes // 60
     if hours < 24:
-        return f"Changed {hours} hr ago"
+        return t("time.hr_ago", n=hours)
     days = hours // 24
-    return f"Changed {days} day(s) ago"
+    return t("time.day_ago", n=days)

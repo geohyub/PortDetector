@@ -49,12 +49,12 @@ class Colors:
 class Fonts:
     FAMILY = "Pretendard"
     MONO = "Cascadia Code"
-    SIZE_XS = 10
-    SIZE_SM = 11
-    SIZE_MD = 12
-    SIZE_LG = 14
-    SIZE_XL = 18
-    SIZE_TITLE = 24
+    SIZE_XS = 12
+    SIZE_SM = 13
+    SIZE_MD = 14
+    SIZE_LG = 16
+    SIZE_XL = 20
+    SIZE_TITLE = 26
 
 
 STYLESHEET = f"""
@@ -127,11 +127,14 @@ QTableWidget {{
     background-color: {Colors.BG};
     border: none;
     gridline-color: transparent;
+    font-family: "{Fonts.FAMILY}", "Segoe UI";
     font-size: {Fonts.SIZE_SM}px;
 }}
 QTableWidget::item {{
-    padding: 4px 8px;
+    padding: 5px 8px;
     border-bottom: 1px solid {Colors.BORDER};
+    font-family: "{Fonts.FAMILY}", "Segoe UI";
+    font-size: {Fonts.SIZE_SM}px;
 }}
 QTableWidget::item:selected {{
     background-color: {Colors.ACCENT_DIM};
@@ -142,6 +145,7 @@ QHeaderView::section {{
     color: {Colors.TEXT_DIM};
     border: none;
     border-bottom: 1px solid {Colors.BORDER_LIGHT};
+    font-family: "{Fonts.FAMILY}", "Segoe UI";
     font-size: {Fonts.SIZE_SM}px;
     font-weight: 500;
     padding: 6px 8px;

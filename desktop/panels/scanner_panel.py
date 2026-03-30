@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt
 
 from desktop.theme import Colors, Fonts
+from desktop.i18n import t
 from desktop.workers.scan_worker import ScanWorkerThread
 
 
@@ -23,18 +24,25 @@ class ScannerPanel(QWidget):
         layout.setSpacing(12)
 
         # Title
-        title = QLabel("Port Scanner")
-        title.setStyleSheet(f"font-size: {Fonts.SIZE_XL}px; font-weight: 600; color: {Colors.TEXT}; background: transparent;")
-        layout.addWidget(title)
+        self._title = QLabel(t("scanner.title"))
+        self._title.setStyleSheet(f"font-size: {Fonts.SIZE_XL}px; font-weight: 600; color: {Colors.TEXT}; background: transparent;")
+        layout.addWidget(self._title)
+
+        self._guide_label = QLabel(t("guide.scanner"))
+        self._guide_label.setWordWrap(True)
+        self._guide_label.setStyleSheet(
+            f"font-size: {Fonts.SIZE_XS}px; color: {Colors.TEXT_MUTED}; background: transparent; padding-bottom: 4px;"
+        )
+        layout.addWidget(self._guide_label)
 
         # Form
         form_row = QHBoxLayout()
         form_row.setSpacing(12)
 
         ip_layout = QVBoxLayout()
-        ip_label = QLabel("Target IP")
-        ip_label.setStyleSheet(f"font-size: {Fonts.SIZE_XS}px; color: {Colors.TEXT_DIM}; background: transparent;")
-        ip_layout.addWidget(ip_label)
+        self._ip_label = QLabel(t("scanner.target_ip"))
+        self._ip_label.setStyleSheet(f"font-size: {Fonts.SIZE_XS}px; color: {Colors.TEXT_DIM}; background: transparent;")
+        ip_layout.addWidget(self._ip_label)
         self._ip_input = QLineEdit()
         self._ip_input.setPlaceholderText("192.168.1.1")
         self._ip_input.setFixedWidth(180)
@@ -42,9 +50,9 @@ class ScannerPanel(QWidget):
         form_row.addLayout(ip_layout)
 
         ports_layout = QVBoxLayout()
-        ports_label = QLabel("Ports")
-        ports_label.setStyleSheet(f"font-size: {Fonts.SIZE_XS}px; color: {Colors.TEXT_DIM}; background: transparent;")
-        ports_layout.addWidget(ports_label)
+        self._ports_label = QLabel(t("scanner.ports"))
+        self._ports_label.setStyleSheet(f"font-size: {Fonts.SIZE_XS}px; color: {Colors.TEXT_DIM}; background: transparent;")
+        ports_layout.addWidget(self._ports_label)
         self._ports_input = QLineEdit()
         self._ports_input.setPlaceholderText("1-1024")
         self._ports_input.setText("1-1024")
@@ -53,22 +61,22 @@ class ScannerPanel(QWidget):
         form_row.addLayout(ports_layout)
 
         proto_layout = QVBoxLayout()
-        proto_label = QLabel("Protocol")
-        proto_label.setStyleSheet(f"font-size: {Fonts.SIZE_XS}px; color: {Colors.TEXT_DIM}; background: transparent;")
-        proto_layout.addWidget(proto_label)
+        self._proto_label = QLabel(t("scanner.protocol"))
+        self._proto_label.setStyleSheet(f"font-size: {Fonts.SIZE_XS}px; color: {Colors.TEXT_DIM}; background: transparent;")
+        proto_layout.addWidget(self._proto_label)
         self._proto_combo = QComboBox()
         self._proto_combo.addItems(["TCP", "UDP"])
         self._proto_combo.setFixedWidth(80)
         proto_layout.addWidget(self._proto_combo)
         form_row.addLayout(proto_layout)
 
-        self._scan_btn = QPushButton("Scan")
+        self._scan_btn = QPushButton(t("scanner.scan"))
         self._scan_btn.setObjectName("btn_primary")
         self._scan_btn.setFixedHeight(32)
         self._scan_btn.clicked.connect(self._start_scan)
         form_row.addWidget(self._scan_btn, 0, Qt.AlignmentFlag.AlignBottom)
 
-        self._stop_btn = QPushButton("Stop")
+        self._stop_btn = QPushButton(t("scanner.stop"))
         self._stop_btn.setObjectName("btn_danger")
         self._stop_btn.setFixedHeight(32)
         self._stop_btn.setEnabled(False)
@@ -91,7 +99,10 @@ class ScannerPanel(QWidget):
         # Results table
         self._table = QTableWidget()
         self._table.setColumnCount(5)
-        self._table.setHorizontalHeaderLabels(["Port", "Protocol", "State", "Service", "IP"])
+        self._table.setHorizontalHeaderLabels([
+            t("scanner.col_port"), t("scanner.col_protocol"),
+            t("scanner.col_state"), t("scanner.col_service"), "IP",
+        ])
         self._table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self._table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
         self._table.setColumnWidth(0, 80)
@@ -117,7 +128,7 @@ class ScannerPanel(QWidget):
         if not ip or not ports:
             return
         if not re.match(r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$', ip):
-            self._summary_label.setText("Invalid IP address format")
+            self._summary_label.setText(t("scanner.invalid_ip"))
             return
 
         self._table.setRowCount(0)
@@ -125,7 +136,7 @@ class ScannerPanel(QWidget):
         self._stop_btn.setEnabled(True)
         self._progress.setVisible(True)
         self._progress.setValue(0)
-        self._summary_label.setText("Scanning...")
+        self._summary_label.setText(t("scanner.scanning"))
 
         protocol = self._proto_combo.currentText().lower()
         self._worker = ScanWorkerThread(ip, ports, protocol)
@@ -177,13 +188,12 @@ class ScannerPanel(QWidget):
         closed_p = data.get('closed_ports', 0)
         total_p = data.get('total_ports', 0)
         self._summary_label.setText(
-            f"Scan complete: {total_p:,} ports scanned / "
-            f"{open_p} open / {closed_p} closed"
+            t("scanner.complete", total=total_p, open=open_p, closed=closed_p)
         )
 
     def _mono_font(self):
         from PySide6.QtGui import QFont
-        return QFont(Fonts.MONO, Fonts.SIZE_SM)
+        return QFont(Fonts.FAMILY, Fonts.SIZE_SM)
 
     def set_target_ip(self, ip):
         self._ip_input.setText(ip)
@@ -193,11 +203,24 @@ class ScannerPanel(QWidget):
         if ports:
             self._ports_input.setText(",".join(str(port) for port in ports))
             self._summary_label.setText(
-                f"Loaded device target {ip} with reference ports "
-                f"{', '.join(str(port) for port in ports)}."
+                t("scanner.loaded", ip=ip, ports=", ".join(str(port) for port in ports))
             )
         else:
-            self._summary_label.setText(f"Loaded device target {ip}.")
+            self._summary_label.setText(t("scanner.loaded_ip", ip=ip))
+
+    def retranslate(self):
+        """Update all translatable strings to current language."""
+        self._title.setText(t("scanner.title"))
+        self._guide_label.setText(t("guide.scanner"))
+        self._ip_label.setText(t("scanner.target_ip"))
+        self._ports_label.setText(t("scanner.ports"))
+        self._proto_label.setText(t("scanner.protocol"))
+        self._scan_btn.setText(t("scanner.scan"))
+        self._stop_btn.setText(t("scanner.stop"))
+        self._table.setHorizontalHeaderLabels([
+            t("scanner.col_port"), t("scanner.col_protocol"),
+            t("scanner.col_state"), t("scanner.col_service"), "IP",
+        ])
 
 
 def pg_color(hex_color):

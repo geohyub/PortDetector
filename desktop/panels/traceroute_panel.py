@@ -8,6 +8,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont
 
 from desktop.theme import Colors, Fonts
+from desktop.i18n import t
 from desktop.workers.traceroute_worker import TracerouteWorkerThread
 
 
@@ -22,23 +23,30 @@ class TraceroutePanel(QWidget):
         layout.setContentsMargins(16, 12, 16, 12)
         layout.setSpacing(12)
 
-        title = QLabel("Traceroute")
-        title.setStyleSheet(f"font-size: {Fonts.SIZE_XL}px; font-weight: 600; color: {Colors.TEXT}; background: transparent;")
-        layout.addWidget(title)
+        self._title = QLabel(t("traceroute.title"))
+        self._title.setStyleSheet(f"font-size: {Fonts.SIZE_XL}px; font-weight: 600; color: {Colors.TEXT}; background: transparent;")
+        layout.addWidget(self._title)
+
+        self._guide_label = QLabel(t("guide.traceroute"))
+        self._guide_label.setWordWrap(True)
+        self._guide_label.setStyleSheet(
+            f"font-size: {Fonts.SIZE_XS}px; color: {Colors.TEXT_MUTED}; background: transparent; padding-bottom: 4px;"
+        )
+        layout.addWidget(self._guide_label)
 
         row = QHBoxLayout()
         row.setSpacing(8)
 
-        ip_label = QLabel("Target:")
-        ip_label.setStyleSheet(f"font-size: {Fonts.SIZE_SM}px; color: {Colors.TEXT_DIM}; background: transparent;")
-        row.addWidget(ip_label)
+        self._target_label = QLabel(t("traceroute.target"))
+        self._target_label.setStyleSheet(f"font-size: {Fonts.SIZE_SM}px; color: {Colors.TEXT_DIM}; background: transparent;")
+        row.addWidget(self._target_label)
 
         self._ip_input = QLineEdit()
         self._ip_input.setPlaceholderText("8.8.8.8")
         self._ip_input.setFixedWidth(180)
         row.addWidget(self._ip_input)
 
-        self._trace_btn = QPushButton("Trace")
+        self._trace_btn = QPushButton(t("traceroute.trace"))
         self._trace_btn.setObjectName("btn_primary")
         self._trace_btn.setFixedHeight(32)
         self._trace_btn.clicked.connect(self._start_trace)
@@ -55,7 +63,9 @@ class TraceroutePanel(QWidget):
         # Hops table
         self._table = QTableWidget()
         self._table.setColumnCount(6)
-        self._table.setHorizontalHeaderLabels(["Hop", "IP", "RTT 1 (ms)", "RTT 2 (ms)", "RTT 3 (ms)", "Avg (ms)"])
+        self._table.setHorizontalHeaderLabels([
+            t("traceroute.col_hop"), "IP", "RTT 1 (ms)", "RTT 2 (ms)", "RTT 3 (ms)", "Avg (ms)",
+        ])
         self._table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self._table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
         self._table.setColumnWidth(0, 50)
@@ -76,7 +86,7 @@ class TraceroutePanel(QWidget):
 
         self._table.setRowCount(0)
         self._trace_btn.setEnabled(False)
-        self._status_label.setText("Tracing route...")
+        self._status_label.setText(t("traceroute.tracing"))
 
         self._worker = TracerouteWorkerThread(ip)
         self._worker.complete.connect(self._on_complete)
@@ -84,10 +94,8 @@ class TraceroutePanel(QWidget):
 
     def _on_complete(self, hops):
         self._trace_btn.setEnabled(True)
-        self._status_label.setText(f"Complete: {len(hops)} hops")
+        self._status_label.setText(t("traceroute.complete", count=len(hops)))
         self._worker = None
-
-        mono = QFont(Fonts.MONO, Fonts.SIZE_SM)
 
         for hop in hops:
             row = self._table.rowCount()
@@ -98,7 +106,6 @@ class TraceroutePanel(QWidget):
             self._table.setItem(row, 0, hop_item)
 
             ip_item = QTableWidgetItem(hop.get('ip', '*'))
-            ip_item.setFont(mono)
             self._table.setItem(row, 1, ip_item)
 
             for col, key in enumerate(['rtt1', 'rtt2', 'rtt3', 'avg_rtt'], start=2):
@@ -106,8 +113,17 @@ class TraceroutePanel(QWidget):
                 text = f"{val:,}" if val is not None else "*"
                 item = QTableWidgetItem(text)
                 item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-                item.setFont(mono)
                 if val is not None and val > 100:
                     from PySide6.QtGui import QColor
                     item.setForeground(QColor(Colors.WARNING))
                 self._table.setItem(row, col, item)
+
+    def retranslate(self):
+        """Update all translatable strings to current language."""
+        self._title.setText(t("traceroute.title"))
+        self._guide_label.setText(t("guide.traceroute"))
+        self._target_label.setText(t("traceroute.target"))
+        self._trace_btn.setText(t("traceroute.trace"))
+        self._table.setHorizontalHeaderLabels([
+            t("traceroute.col_hop"), "IP", "RTT 1 (ms)", "RTT 2 (ms)", "RTT 3 (ms)", "Avg (ms)",
+        ])

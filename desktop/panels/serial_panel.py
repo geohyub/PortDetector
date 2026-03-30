@@ -8,6 +8,7 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont, QColor
 
 from desktop.theme import Colors, Fonts
+from desktop.i18n import t
 from backend.services.serial_service import list_serial_ports
 
 
@@ -24,9 +25,16 @@ class SerialPanel(QWidget):
         layout.setContentsMargins(16, 12, 16, 12)
         layout.setSpacing(12)
 
-        title = QLabel("Serial / NMEA Ports")
-        title.setStyleSheet(f"font-size: {Fonts.SIZE_XL}px; font-weight: 600; color: {Colors.TEXT}; background: transparent;")
-        layout.addWidget(title)
+        self._title_label = QLabel(t("serial.title"))
+        self._title_label.setStyleSheet(f"font-size: {Fonts.SIZE_XL}px; font-weight: 600; color: {Colors.TEXT}; background: transparent;")
+        layout.addWidget(self._title_label)
+
+        self._guide_label = QLabel(t("guide.serial"))
+        self._guide_label.setWordWrap(True)
+        self._guide_label.setStyleSheet(
+            f"font-size: {Fonts.SIZE_XS}px; color: {Colors.TEXT_MUTED}; background: transparent; padding-bottom: 4px;"
+        )
+        layout.addWidget(self._guide_label)
 
         # Controls
         ctrl = QHBoxLayout()
@@ -37,16 +45,16 @@ class SerialPanel(QWidget):
         self._port_input.setFixedWidth(160)
         ctrl.addWidget(self._port_input)
 
-        add_btn = QPushButton("Add to Monitor")
-        add_btn.setObjectName("btn_primary")
-        add_btn.setFixedHeight(30)
-        add_btn.clicked.connect(self._add_port)
-        ctrl.addWidget(add_btn)
+        self._add_btn = QPushButton(t("serial.add_monitor"))
+        self._add_btn.setObjectName("btn_primary")
+        self._add_btn.setFixedHeight(30)
+        self._add_btn.clicked.connect(self._add_port)
+        ctrl.addWidget(self._add_btn)
 
-        refresh_btn = QPushButton("Detect Ports")
-        refresh_btn.setFixedHeight(30)
-        refresh_btn.clicked.connect(self._detect_ports)
-        ctrl.addWidget(refresh_btn)
+        self._detect_btn = QPushButton(t("serial.detect"))
+        self._detect_btn.setFixedHeight(30)
+        self._detect_btn.clicked.connect(self._detect_ports)
+        ctrl.addWidget(self._detect_btn)
 
         ctrl.addStretch()
 
@@ -59,7 +67,10 @@ class SerialPanel(QWidget):
         # Table
         self._table = QTableWidget()
         self._table.setColumnCount(5)
-        self._table.setHorizontalHeaderLabels(["Port", "Status", "Description", "Message", "Manufacturer"])
+        self._table.setHorizontalHeaderLabels([
+            t("serial.col_port"), t("serial.col_status"), t("serial.col_desc"),
+            t("serial.col_message"), t("serial.col_mfg"),
+        ])
         self._table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self._table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
         self._table.setColumnWidth(0, 80)
@@ -75,27 +86,36 @@ class SerialPanel(QWidget):
         # Initial detection
         self._detect_ports()
 
+    def retranslate(self):
+        """Update all translatable strings to the current language."""
+        self._title_label.setText(t("serial.title"))
+        self._guide_label.setText(t("guide.serial"))
+        self._add_btn.setText(t("serial.add_monitor"))
+        self._detect_btn.setText(t("serial.detect"))
+        self._table.setHorizontalHeaderLabels([
+            t("serial.col_port"), t("serial.col_status"), t("serial.col_desc"),
+            t("serial.col_message"), t("serial.col_mfg"),
+        ])
+
     def _detect_ports(self):
         ports = list_serial_ports()
         self._table.setRowCount(0)
-        mono = QFont(Fonts.MONO, Fonts.SIZE_SM)
 
         if not ports:
-            self._status_label.setText("No serial ports detected (pyserial required)")
+            self._status_label.setText(t("serial.no_ports"))
             return
 
-        self._status_label.setText(f"{len(ports)} port(s) detected")
+        self._status_label.setText(t("serial.detected", count=len(ports)))
 
         for p in ports:
             row = self._table.rowCount()
             self._table.insertRow(row)
 
             port_item = QTableWidgetItem(p['port'])
-            port_item.setFont(mono)
             self._table.setItem(row, 0, port_item)
 
             monitored = p['port'] in self._monitored_ports
-            status_item = QTableWidgetItem("Monitored" if monitored else "Available")
+            status_item = QTableWidgetItem(t("serial.monitored") if monitored else t("serial.available"))
             status_item.setForeground(QColor(Colors.CONNECTED if monitored else Colors.TEXT_DIM))
             self._table.setItem(row, 1, status_item)
 
@@ -117,7 +137,6 @@ class SerialPanel(QWidget):
     def update_serial_data(self, results):
         """Update table from serial worker results."""
         self._table.setRowCount(0)
-        mono = QFont(Fonts.MONO, Fonts.SIZE_SM)
 
         status_colors = {
             'connected': Colors.CONNECTED,
@@ -130,7 +149,6 @@ class SerialPanel(QWidget):
             self._table.insertRow(row)
 
             port_item = QTableWidgetItem(r.get('port', ''))
-            port_item.setFont(mono)
             self._table.setItem(row, 0, port_item)
 
             status = r.get('status', 'available')
@@ -142,4 +160,4 @@ class SerialPanel(QWidget):
             self._table.setItem(row, 3, QTableWidgetItem(r.get('message', '')))
             self._table.setItem(row, 4, QTableWidgetItem(r.get('manufacturer', '')))
 
-        self._status_label.setText(f"{len(results)} port(s)")
+        self._status_label.setText(t("serial.detected", count=len(results)))

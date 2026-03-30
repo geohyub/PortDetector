@@ -12,6 +12,7 @@ from PySide6.QtGui import QIcon, QPixmap, QImage, QAction
 
 from config import APP_NAME, VERSION
 from desktop.theme import Colors, Fonts, STYLESHEET
+from desktop.i18n import t, set_language, get_language
 from desktop.panels.dashboard_panel import DashboardPanel
 from desktop.panels.scanner_panel import ScannerPanel
 from desktop.panels.discovery_panel import DiscoveryPanel
@@ -39,16 +40,9 @@ from backend.utils.monitoring_presenter import (
 )
 
 
-NAV_ITEMS = [
-    ("Dashboard", 0),
-    ("Scanner", 1),
-    ("Discovery", 2),
-    ("Traceroute", 3),
-    ("Interfaces", 4),
-    ("Serial/NMEA", 5),
-    ("History", 6),
-    ("Report", 7),
-    ("Settings", 8),
+NAV_KEYS = [
+    "nav.dashboard", "nav.scanner", "nav.discovery", "nav.traceroute",
+    "nav.interfaces", "nav.serial", "nav.history", "nav.report", "nav.settings",
 ]
 
 
@@ -126,9 +120,10 @@ class MainWindow(QMainWindow):
 
         # Nav buttons
         self._nav_buttons = []
-        for label, idx in NAV_ITEMS:
-            btn = QPushButton(label)
+        for idx, key in enumerate(NAV_KEYS):
+            btn = QPushButton(t(key))
             btn.setProperty("active", idx == 0)
+            btn.setProperty("nav_key", key)
             btn.clicked.connect(lambda checked, i=idx: self._switch_page(i))
             sidebar_layout.addWidget(btn)
             self._nav_buttons.append(btn)
@@ -139,9 +134,9 @@ class MainWindow(QMainWindow):
         self._traffic_label = QLabel()
         self._traffic_label.setStyleSheet(f"font-size: {Fonts.SIZE_XS}px; color: {Colors.TEXT_MUTED}; padding: 8px 16px; background: transparent;")
         if self._traffic_service and self._traffic_service.is_available():
-            self._traffic_label.setText("Traffic: Active")
+            self._traffic_label.setText(t("common.traffic_active"))
         else:
-            self._traffic_label.setText("Traffic: Disabled")
+            self._traffic_label.setText(t("common.traffic_disabled"))
         sidebar_layout.addWidget(self._traffic_label)
 
         root.addWidget(sidebar)
@@ -198,6 +193,7 @@ class MainWindow(QMainWindow):
         self._settings.settings_changed.connect(self._on_settings_changed)
         self._settings.profile_loaded.connect(self._on_profile_loaded)
         self._settings.preset_loaded.connect(self._on_profile_loaded)
+        self._settings.language_changed.connect(self._on_language_changed)
         self._stack.addWidget(self._settings)
 
         content_area.addWidget(self._stack, 1)
@@ -213,6 +209,42 @@ class MainWindow(QMainWindow):
         if idx == 6:  # History
             self._history_panel.refresh_device_filter()
             self._history_panel._refresh()
+
+    def _on_language_changed(self, lang: str):
+        """Re-translate all UI text when language changes."""
+        set_language(lang)
+        # Save to settings
+        self._config_service.update_settings({'language': lang})
+
+        # Sidebar nav buttons
+        for btn in self._nav_buttons:
+            key = btn.property("nav_key")
+            if key:
+                btn.setText(t(key))
+
+        # Traffic label
+        if self._traffic_service and self._traffic_service.is_available():
+            self._traffic_label.setText(t("common.traffic_active"))
+        else:
+            self._traffic_label.setText(t("common.traffic_disabled"))
+
+        # Retranslate all panels
+        self._dashboard.retranslate()
+        self._scanner.retranslate()
+        self._discovery.retranslate()
+        self._traceroute.retranslate()
+        self._interfaces.retranslate()
+        self._serial.retranslate()
+        self._history_panel.retranslate()
+        self._report.retranslate()
+        self._settings.retranslate()
+
+        # Refresh dynamic content
+        self._update_dashboard_context()
+
+        # Tray menu
+        if hasattr(self, '_tray'):
+            self._setup_tray()
 
     def _setup_workers(self):
         settings = self._config_service.get_settings()
@@ -254,27 +286,29 @@ class MainWindow(QMainWindow):
         if not QSystemTrayIcon.isSystemTrayAvailable():
             return
 
-        self._tray = QSystemTrayIcon(self)
-        img = QImage(64, 64, QImage.Format.Format_ARGB32)
-        img.fill(Qt.GlobalColor.transparent)
-        from PySide6.QtGui import QPainter, QBrush
-        painter = QPainter(img)
-        painter.setBrush(QBrush(Qt.GlobalColor.cyan))
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.drawEllipse(4, 4, 56, 56)
-        painter.end()
-        self._tray.setIcon(QIcon(QPixmap.fromImage(img)))
+        if not hasattr(self, '_tray'):
+            self._tray = QSystemTrayIcon(self)
+            img = QImage(64, 64, QImage.Format.Format_ARGB32)
+            img.fill(Qt.GlobalColor.transparent)
+            from PySide6.QtGui import QPainter, QBrush
+            painter = QPainter(img)
+            painter.setBrush(QBrush(Qt.GlobalColor.cyan))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.drawEllipse(4, 4, 56, 56)
+            painter.end()
+            self._tray.setIcon(QIcon(QPixmap.fromImage(img)))
+            self._tray.activated.connect(self._on_tray_activated)
+
         self._tray.setToolTip(f"{APP_NAME} v{VERSION}")
 
         menu = QMenu()
-        show_action = QAction("Show", self)
+        show_action = QAction(t("tray.show"), self)
         show_action.triggered.connect(self.showNormal)
         menu.addAction(show_action)
-        quit_action = QAction("Exit", self)
+        quit_action = QAction(t("tray.exit"), self)
         quit_action.triggered.connect(self._quit)
         menu.addAction(quit_action)
         self._tray.setContextMenu(menu)
-        self._tray.activated.connect(self._on_tray_activated)
         self._tray.show()
 
     # ── Event handlers ──
@@ -325,28 +359,28 @@ class MainWindow(QMainWindow):
         if hasattr(self, '_tray'):
             if level == 'recovered':
                 if issue_status == 'delayed':
-                    msg = f"{name}: Latency recovered and is back within threshold."
+                    msg = t("alert.recovered_latency", name=name)
                 else:
-                    msg = f"{name}: Recovered and is back online."
+                    msg = t("alert.recovered", name=name)
                 icon = QSystemTrayIcon.MessageIcon.Information
             elif issue_status == 'delayed':
                 if level == 'critical':
-                    msg = f"{name}: High latency persisted for {count} consecutive checks."
+                    msg = t("alert.critical_latency", name=name, count=count)
                     icon = QSystemTrayIcon.MessageIcon.Critical
                 else:
-                    msg = f"{name}: Latency is above threshold for {count} consecutive checks."
+                    msg = t("alert.warning_latency", name=name, count=count)
                     icon = QSystemTrayIcon.MessageIcon.Warning
             elif level == 'emergency':
-                msg = f"{name}: EMERGENCY ({count} consecutive failures)"
+                msg = t("alert.emergency", name=name, count=count)
                 icon = QSystemTrayIcon.MessageIcon.Critical
             elif level == 'critical':
-                msg = f"{name}: CRITICAL ({count} consecutive failures)"
+                msg = t("alert.critical", name=name, count=count)
                 icon = QSystemTrayIcon.MessageIcon.Critical
             else:
-                msg = f"{name}: Disconnected"
+                msg = t("alert.disconnected", name=name)
                 icon = QSystemTrayIcon.MessageIcon.Warning
 
-            self._tray.showMessage(f"{APP_NAME} Alert", msg, icon, 5000)
+            self._tray.showMessage(f"{APP_NAME}", msg, icon, 5000)
 
     def _on_status_change(self, data):
         device_id = data.get('device_id', '')
@@ -419,7 +453,7 @@ class MainWindow(QMainWindow):
                     self._config_service.add_device(device)
                     self._refresh_devices()
                 except ValueError as e:
-                    QMessageBox.warning(self, "Validation Error", str(e))
+                    QMessageBox.warning(self, t("common.validation_error"), str(e))
 
     def _on_device_selected(self, device_id):
         self._selected_device_id = device_id
@@ -453,12 +487,12 @@ class MainWindow(QMainWindow):
             last_change = self._last_status_changes.get(device.id) or runtime.get('timestamp')
 
             if not device.enabled:
-                status_label = "Monitoring disabled"
-                reason = "This device is saved in the profile but excluded from live polling."
+                status_label_text = t("status.disabled")
+                reason = t("status.disabled_reason")
                 severity = "info"
-                last_change_text = "Monitoring disabled"
+                last_change_text = t("status.disabled")
             else:
-                status_label = build_status_label(status)
+                status_label_text = build_status_label(status)
                 reason = runtime.get('reason') or build_status_reason(
                     status,
                     runtime.get('rtt_ms'),
@@ -467,7 +501,7 @@ class MainWindow(QMainWindow):
                 last_change_text = (
                     format_relative_time(last_change, now)
                     if last_change else
-                    "Waiting for the first monitoring result"
+                    t("status.waiting_first")
                 )
 
             snapshots.append({
@@ -479,7 +513,7 @@ class MainWindow(QMainWindow):
                 'importance': device.importance,
                 'importance_label': importance_label(device.importance),
                 'status': status,
-                'status_label': status_label,
+                'status_label': status_label_text,
                 'severity': severity,
                 'reason': reason,
                 'rtt_ms': runtime.get('rtt_ms'),
@@ -504,9 +538,9 @@ class MainWindow(QMainWindow):
         if not snapshots:
             return {
                 'severity': 'info',
-                'headline': "No devices configured yet",
-                'detail': "Add the ports and devices that matter on the vessel so PortDetector can summarize real health.",
-                'context': "Use Add Device and assign importance so alerts can prioritize the systems that matter most.",
+                'headline': t("dash.no_devices_headline"),
+                'detail': t("dash.no_devices_detail"),
+                'context': t("dash.no_devices_context"),
             }
 
         critical_count = sum(
@@ -519,31 +553,27 @@ class MainWindow(QMainWindow):
         top_issue = next((snap for snap in snapshots if snap.get('status') in ('delayed', 'disconnected')), None)
 
         if critical_count > 0 and top_issue:
-            headline = f"{critical_count} device(s) need immediate attention"
+            headline = t("dash.immediate_attention", count=critical_count)
             detail = (
-                f"{top_issue['name']} is currently {top_issue['status_label'].lower()}. "
+                f"{top_issue['name']}: {top_issue['status_label'].lower()}. "
                 f"{top_issue['action_text']}"
             )
             severity = top_issue.get('severity', 'critical')
         elif attention_count > 0 and top_issue:
-            headline = f"{attention_count} device(s) need review"
-            detail = (
-                f"{stable_count} stable / {offline_count} offline / "
-                f"{attention_count - offline_count} high-latency. "
-                f"Top review target: {top_issue['name']}."
-            )
+            headline = t("dash.needs_review", count=attention_count)
+            detail = t("dash.review_detail",
+                stable=stable_count, offline=offline_count,
+                delayed=attention_count - offline_count, name=top_issue['name'])
             severity = top_issue.get('severity', 'warning')
         else:
-            headline = "All monitored devices are currently stable"
-            detail = f"{stable_count} device(s) are responding within the current monitoring threshold."
+            headline = t("dash.all_stable")
+            detail = t("dash.all_stable_detail", count=stable_count)
             severity = "stable"
 
         settings = self._config_service.get_settings()
-        context = (
-            f"Ping every {settings.get('ping_interval_seconds', 5)} sec | "
-            f"Delay threshold {self._delay_threshold_ms:,} ms | "
-            f"Latency alerts start after 3 consecutive slow replies"
-        )
+        context = t("dash.overview_context",
+            interval=settings.get('ping_interval_seconds', 5),
+            threshold=f"{self._delay_threshold_ms:,}")
         return {
             'severity': severity,
             'headline': headline,
@@ -570,10 +600,11 @@ class MainWindow(QMainWindow):
         if snapshot.get('last_change_text'):
             meta_parts.append(snapshot['last_change_text'])
 
-        description = snapshot.get('description') or "Add a short description if operators need more context."
+        description = snapshot.get('description') or ""
         ports_text = (
             f"Reference ports: {build_ports_text(snapshot.get('ports'))}. "
-            f"Role: {description}"
+            f"Role: {description}" if description else
+            f"Reference ports: {build_ports_text(snapshot.get('ports'))}"
         )
 
         return {
