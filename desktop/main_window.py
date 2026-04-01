@@ -1,5 +1,6 @@
 """PortDetector MainWindow — sidebar navigation + stacked panels."""
 
+import os
 from datetime import datetime
 
 from PySide6.QtWidgets import (
@@ -22,6 +23,7 @@ from desktop.panels.serial_panel import SerialPanel
 from desktop.panels.history_panel import HistoryPanel
 from desktop.panels.report_panel import ReportPanel
 from desktop.panels.settings_panel import SettingsPanel
+from desktop.panels.network_map_panel import NetworkMapPanel
 from desktop.dialogs.device_dialog import DeviceDialog
 from desktop.workers.ping_worker import PingWorkerThread
 from desktop.workers.interface_worker import InterfaceWorkerThread
@@ -42,7 +44,8 @@ from backend.utils.monitoring_presenter import (
 
 NAV_KEYS = [
     "nav.dashboard", "nav.scanner", "nav.discovery", "nav.traceroute",
-    "nav.interfaces", "nav.serial", "nav.history", "nav.report", "nav.settings",
+    "nav.interfaces", "nav.serial", "nav.networkmap",
+    "nav.history", "nav.report", "nav.settings",
 ]
 
 
@@ -176,15 +179,23 @@ class MainWindow(QMainWindow):
         self._serial.monitored_ports_changed.connect(self._on_serial_ports_changed)
         self._stack.addWidget(self._serial)
 
-        # 6: History
+        # 6: Network Map
+        from backend.services.network_map_service import NetworkMapService
+        self._map_service = NetworkMapService(
+            os.path.join(self._config_service._data_dir)
+        )
+        self._network_map = NetworkMapPanel(self._config_service, self._map_service)
+        self._stack.addWidget(self._network_map)
+
+        # 7: History
         self._history_panel = HistoryPanel(self._log_service, self._config_service)
         self._stack.addWidget(self._history_panel)
 
-        # 7: Report
+        # 8: Report
         self._report = ReportPanel(self._uptime_service, self._config_service)
         self._stack.addWidget(self._report)
 
-        # 8: Settings
+        # 9: Settings
         self._settings = SettingsPanel(
             self._config_service,
             self._profile_service,
@@ -206,7 +217,7 @@ class MainWindow(QMainWindow):
             btn.style().unpolish(btn)
             btn.style().polish(btn)
 
-        if idx == 6:  # History
+        if idx == 7:  # History
             self._history_panel.refresh_device_filter()
             self._history_panel._refresh()
 
@@ -235,6 +246,7 @@ class MainWindow(QMainWindow):
         self._traceroute.retranslate()
         self._interfaces.retranslate()
         self._serial.retranslate()
+        self._network_map.retranslate()
         self._history_panel.retranslate()
         self._report.retranslate()
         self._settings.retranslate()
@@ -387,7 +399,7 @@ class MainWindow(QMainWindow):
         timestamp = data.get('timestamp')
         if device_id:
             self._last_status_changes[device_id] = timestamp
-        if self._stack.currentIndex() == 6:
+        if self._stack.currentIndex() == 7:
             self._history_panel._refresh()
         self._update_dashboard_context()
 
@@ -646,6 +658,8 @@ class MainWindow(QMainWindow):
         if self._serial_worker:
             self._serial_worker.stop()
             self._serial_worker.wait(3000)
+        if hasattr(self, '_network_map'):
+            self._network_map.stop_workers()
         if self._traffic_service:
             self._traffic_service.stop()
 
