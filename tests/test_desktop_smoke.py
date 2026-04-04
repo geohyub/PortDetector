@@ -20,11 +20,83 @@ def app():
     yield _app
 
 
-def test_main_window_creates(app):
+def test_main_window_creates(app, tmp_path):
     """MainWindow가 offscreen에서 정상 생성되는지 확인."""
     from desktop.main_window import MainWindow
-    window = MainWindow()
+
+    class _LogService:
+        def get_all_entries(self, *args, **kwargs):
+            return []
+
+        def get_history(self, *args, **kwargs):
+            return []
+
+    class _TrafficService:
+        def is_available(self):
+            return False
+
+        def stop(self):
+            return None
+
+    class _ProfileService:
+        def list_profiles(self):
+            return []
+
+        def save_profile(self, *args, **kwargs):
+            return None
+
+        def load_profile(self, *args, **kwargs):
+            return {}
+
+        def delete_profile(self, *args, **kwargs):
+            return False
+
+    class _BackupService:
+        def list_backups(self):
+            return []
+
+        def create_backup(self, *args, **kwargs):
+            return {"filename": "backup.json"}
+
+        def load_backup(self, *args, **kwargs):
+            return {"config": {"settings": {}, "devices": []}}
+
+    class _AlertService:
+        def set_sound_enabled(self, *args, **kwargs):
+            return None
+
+        def set_escalation_enabled(self, *args, **kwargs):
+            return None
+
+        def on_status_update(self, *args, **kwargs):
+            return None
+
+        def get_issue_state(self, *args, **kwargs):
+            return {}
+
+        def play_alert_sound_async(self, *args, **kwargs):
+            return None
+
+    from backend.services.config_service import ConfigService
+    from backend.services.uptime_service import UptimeService
+
+    config_service = ConfigService(str(tmp_path))
+    log_service = _LogService()
+    window = MainWindow(
+        config_service,
+        log_service,
+        _TrafficService(),
+        _ProfileService(),
+        _AlertService(),
+        _BackupService(),
+        UptimeService(log_service),
+    )
     assert window is not None
+    window._stop_workers()
+    if hasattr(window, "_tray"):
+        window._tray.hide()
+    window.close()
+    window.deleteLater()
 
 
 def test_py_compile():

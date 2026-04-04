@@ -14,6 +14,7 @@ from PySide6.QtGui import QFont, QColor
 
 from desktop.theme import Colors, Fonts
 from desktop.i18n import t
+from desktop.services.export_service import export_history_csv
 from backend.utils.monitoring_presenter import (
     build_ports_text,
     build_status_reason,
@@ -363,20 +364,5 @@ class HistoryPanel(QWidget):
             events=event_filter,
         )
         device_lookup = self._device_lookup()
-
-        with open(path, 'w', newline='', encoding='utf-8') as f:
-            writer = csv.writer(f)
-            writer.writerow([
-                t("history.col_timestamp"), t("history.col_device"), t("history.col_change"),
-                t("history.col_severity"), t("history.col_detail"), t("history.col_rtt"),
-            ])
-            for entry in entries:
-                view = self._build_entry_view(entry, device_lookup)
-                writer.writerow([
-                    view['timestamp'],
-                    view['device'],
-                    view['change'],
-                    view['severity_label'],
-                    view['detail'],
-                    "" if view['rtt'] is None else view['rtt'],
-                ])
+        views = [self._build_entry_view(entry, device_lookup) for entry in entries]
+        export_history_csv(views, path)

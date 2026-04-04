@@ -10,6 +10,7 @@ from PySide6.QtGui import QFont, QColor
 
 from desktop.theme import Colors, Fonts
 from desktop.i18n import t
+from desktop.services.export_service import export_report_spreadsheet
 from backend.utils.monitoring_presenter import (
     importance_label,
     severity_label,
@@ -224,101 +225,13 @@ class ReportPanel(QWidget):
             return
 
         try:
-            import openpyxl
-            from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
-            from openpyxl.utils import get_column_letter
-
-            wb = openpyxl.Workbook()
-            ws = wb.active
-            ws.title = "Uptime Report"
-
-            # Header style
-            header_font = Font(name="Pretendard", size=11, bold=True, color="FFFFFF")
-            header_fill = PatternFill(start_color="0F3460", end_color="0F3460", fill_type="solid")
-            thin_border = Border(
-                bottom=Side(style='thin', color='2A2A4A'),
-            )
-
-            summary_lines = [
-                "PortDetector Uptime Report",
+            saved_path = export_report_spreadsheet(
+                self._report_data,
                 self._summary_label.text(),
-                f"Generated: {self._period_combo.currentText()}",
-            ]
-            for row_idx, line in enumerate(summary_lines, 1):
-                ws.cell(row=row_idx, column=1, value=line)
-            ws.append([])
-
-            header_row = 5
-            headers = ["Device", "IP", "Category", "Importance", "Health", "Uptime %",
-                        "Up (min)", "Down (min)", "Disconnects", "Avg RTT (ms)",
-                        "Status Changes", "Why It Matters", "Next Action"]
-
-            for col, h in enumerate(headers, 1):
-                cell = ws.cell(row=header_row, column=col, value=h)
-                cell.font = header_font
-                cell.fill = header_fill
-                cell.alignment = Alignment(horizontal='center')
-                cell.border = thin_border
-
-            # Data
-            data_font = Font(name="Pretendard", size=10)
-            num_align = Alignment(horizontal='right')
-
-            for i, row_data in enumerate(self._report_data, header_row + 1):
-                ws.cell(row=i, column=1, value=row_data['name'])
-                ws.cell(row=i, column=2, value=row_data['ip']).font = data_font
-                ws.cell(row=i, column=3, value=row_data['category'])
-                ws.cell(row=i, column=4, value=importance_label(row_data['importance']))
-
-                health_cell = ws.cell(row=i, column=5, value=severity_label(row_data['report_severity']))
-                health_cell.font = Font(
-                    name="Pretendard",
-                    size=10,
-                    color=SEVERITY_COLORS.get(row_data['report_severity'], Colors.TEXT_DIM).replace("#", "").upper(),
-                )
-
-                pct_cell = ws.cell(row=i, column=6, value=row_data['uptime_pct'] / 100)
-                pct_cell.number_format = '0.0%'
-                pct_cell.alignment = num_align
-                pct_cell.font = data_font
-
-                # Conditional color for uptime
-                pct = row_data['uptime_pct']
-                if pct < 95:
-                    pct_cell.font = Font(name="Pretendard", size=10, color="EF476F")
-                elif pct < 99:
-                    pct_cell.font = Font(name="Pretendard", size=10, color="FFD166")
-                else:
-                    pct_cell.font = Font(name="Pretendard", size=10, color="06D6A0")
-
-                for col, key in [(7, 'up_mins'), (8, 'down_mins')]:
-                    c = ws.cell(row=i, column=col, value=row_data[key])
-                    c.number_format = '#,##0'
-                    c.alignment = num_align
-                    c.font = data_font
-
-                ws.cell(row=i, column=9, value=row_data['disconnects']).alignment = num_align
-
-                avg_rtt = row_data['avg_rtt']
-                rtt_cell = ws.cell(row=i, column=10, value=avg_rtt if avg_rtt is not None else '')
-                if avg_rtt is not None:
-                    rtt_cell.number_format = '#,##0.0'
-                rtt_cell.alignment = num_align
-                rtt_cell.font = data_font
-
-                ws.cell(row=i, column=11, value=row_data['status_changes']).alignment = num_align
-                ws.cell(row=i, column=12, value=row_data['report_summary'])
-                ws.cell(row=i, column=13, value=row_data['report_action'])
-
-            # Column widths
-            widths = [20, 16, 14, 12, 12, 12, 12, 12, 12, 14, 14, 34, 34]
-            for col, w in enumerate(widths, 1):
-                ws.column_dimensions[get_column_letter(col)].width = w
-
-            ws.freeze_panes = f"A{header_row + 1}"
-
-            wb.save(path)
-            QMessageBox.information(self, t("common.export"), t("report.exported", path=path))
+                hours,
+                path,
+            )
+            QMessageBox.information(self, t("common.export"), t("report.exported", path=saved_path))
         except ImportError:
             QMessageBox.warning(self, t("common.error"), "openpyxl is required for Excel export.\npip install openpyxl")
         except Exception as e:
