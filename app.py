@@ -9,7 +9,7 @@ import webbrowser
 from flask import Flask, render_template
 from flask_socketio import SocketIO
 
-from config import APP_NAME, VERSION, DEFAULT_WEB_PORT
+from config import APP_NAME, VERSION, DEFAULT_WEB_PORT, load_or_create_secret_key
 
 # Path resolution for PyInstaller
 if getattr(sys, 'frozen', False):
@@ -29,9 +29,10 @@ app = Flask(
     template_folder=TEMPLATE_DIR,
     static_folder=STATIC_DIR,
 )
-app.config['SECRET_KEY'] = 'portdetector-local-only'
+app.config['SECRET_KEY'] = load_or_create_secret_key(DATA_DIR)
 
-socketio = SocketIO(app, async_mode='threading', cors_allowed_origins='*')
+# Same-origin only; the app serves its own frontend from 127.0.0.1.
+socketio = SocketIO(app, async_mode='threading')
 
 # Services
 from backend.services.config_service import ConfigService

@@ -113,3 +113,11 @@ def test_py_compile():
                 except py_compile.PyCompileError as e:
                     errors.append(str(e))
     assert not errors, f"py_compile 실패:\n" + "\n".join(errors)
+
+
+def test_settings_panel_py_compile():
+    """settings_panel.py만 단독으로 컴파일해 가장 좁은 회귀 확인을 제공한다."""
+    import py_compile
+
+    path = os.path.join(_ROOT, "desktop", "panels", "settings_panel.py")
+    py_compile.compile(path, doraise=True)

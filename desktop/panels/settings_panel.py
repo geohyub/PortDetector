@@ -7,8 +7,7 @@ import yaml
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QLabel,
-    QPushButton, QSpinBox, QCheckBox, QGroupBox, QFileDialog,
-    QMessageBox, QComboBox, QLineEdit, QScrollArea,
+    QPushButton, QSpinBox, QCheckBox, QGroupBox, QFileDialog, QComboBox, QLineEdit, QScrollArea,
 )
 from PySide6.QtCore import Qt, Signal
 
@@ -355,27 +354,40 @@ class SettingsPanel(QWidget):
                 "manual-backup",
                 "Manual backup created from Settings.",
             )
-            QMessageBox.information(
-                self,
+            from geoview_pyside6.widgets.confirm_dialog import ConfirmDialog
+
+            ConfirmDialog(
                 "Backup Created",
                 f"Saved backup:\n{backup['filename']}",
-            )
+                confirm_text="OK",
+                cancel_text="",
+                dialog_type="success",
+                parent=self,
+            ).exec()
         except Exception as e:
-            QMessageBox.warning(self, "Backup Error", str(e))
+            from geoview_pyside6.widgets.confirm_dialog import ConfirmDialog
 
+            ConfirmDialog("Backup Error", str(e), confirm_text="OK", cancel_text="", dialog_type="warning", parent=self).exec()
     def _restore_backup(self):
         filename = self._backup_combo.currentData()
         if not filename:
-            QMessageBox.information(self, "Restore Backup", "Select a backup first.")
+            from geoview_pyside6.widgets.confirm_dialog import ConfirmDialog
+
+            ConfirmDialog("Restore Backup", "Select a backup first.", confirm_text="OK", cancel_text="", dialog_type="success", parent=self).exec()
             return
 
-        reply = QMessageBox.question(
-            self,
+        from geoview_pyside6.widgets.confirm_dialog import ConfirmDialog
+
+
+        _cdlg = ConfirmDialog(
             "Restore Backup",
             "This will REPLACE the current devices and settings with the selected backup. Continue?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            confirm_text="Yes",
+            cancel_text="No",
+            dialog_type="warning",
+            parent=self,
         )
-        if reply != QMessageBox.StandardButton.Yes:
+        if _cdlg.exec() != _cdlg.Accepted:
             return
 
         try:
@@ -383,22 +395,28 @@ class SettingsPanel(QWidget):
                 "before-backup-restore",
                 f"Automatic restore point before restoring {filename}",
             )
-            payload = self._backup_service.load_backup(filename)
+            payload = self._backup_service.restore_backup(filename)
             if not payload:
                 raise ValueError("Backup not found.")
 
-            self._config_service.import_config(payload.get('config', {}))
+            self._config_service.import_config(payload["config"])
             self._load_settings()
             self.profile_loaded.emit()
-            QMessageBox.information(
-                self,
+            from geoview_pyside6.widgets.confirm_dialog import ConfirmDialog
+
+            ConfirmDialog(
                 "Backup Restored",
                 f"Restored backup '{filename}'.\n"
                 f"Previous state was saved as '{restore_point['filename']}'.",
-            )
+                confirm_text="OK",
+                cancel_text="",
+                dialog_type="success",
+                parent=self,
+            ).exec()
         except Exception as e:
-            QMessageBox.warning(self, "Restore Error", str(e))
+            from geoview_pyside6.widgets.confirm_dialog import ConfirmDialog
 
+            ConfirmDialog("Restore Error", str(e), confirm_text="OK", cancel_text="", dialog_type="warning", parent=self).exec()
     # ── Presets ──
 
     def _refresh_presets(self):
@@ -423,12 +441,18 @@ class SettingsPanel(QWidget):
         if not path:
             return
 
-        reply = QMessageBox.question(
-            self, "Load Preset",
+        from geoview_pyside6.widgets.confirm_dialog import ConfirmDialog
+
+
+        _cdlg = ConfirmDialog(
+            "Load Preset",
             "This will REPLACE all current devices with the preset. Continue?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            confirm_text="Yes",
+            cancel_text="No",
+            dialog_type="warning",
+            parent=self,
         )
-        if reply != QMessageBox.StandardButton.Yes:
+        if _cdlg.exec() != _cdlg.Accepted:
             return
 
         try:
@@ -462,14 +486,21 @@ class SettingsPanel(QWidget):
             self._config_service.import_config(config)
 
             self.preset_loaded.emit()
-            QMessageBox.information(
-                self, "Preset Loaded",
-                f"Loaded {len(devices)} devices from preset.\n"
-                f"Backup created: {restore_point['filename']}"
-            )
-        except Exception as e:
-            QMessageBox.warning(self, "Preset Error", str(e))
+            from geoview_pyside6.widgets.confirm_dialog import ConfirmDialog
 
+            ConfirmDialog(
+                "Preset Loaded",
+                f"Loaded {len(devices)} devices from preset.\n"
+                f"Backup created: {restore_point['filename']}",
+                confirm_text="OK",
+                cancel_text="",
+                dialog_type="success",
+                parent=self,
+            ).exec()
+        except Exception as e:
+            from geoview_pyside6.widgets.confirm_dialog import ConfirmDialog
+
+            ConfirmDialog("Preset Error", str(e), confirm_text="OK", cancel_text="", dialog_type="warning", parent=self).exec()
     def _import_preset_yaml(self):
         path, _ = QFileDialog.getOpenFileName(
             self, t("settings.import_yaml"), "", "YAML Files (*.yaml *.yml)"
@@ -483,8 +514,9 @@ class SettingsPanel(QWidget):
         dest = os.path.join(presets_dir, os.path.basename(path))
         shutil.copy2(path, dest)
         self._refresh_presets()
-        QMessageBox.information(self, t("common.import"), "Preset YAML imported. Select it from the dropdown.")
+        from geoview_pyside6.widgets.confirm_dialog import ConfirmDialog
 
+        ConfirmDialog(t("common.import"), "Preset YAML imported. Select it from the dropdown.", confirm_text="OK", cancel_text="", dialog_type="success", parent=self).exec()
     # ── Profiles ──
 
     def _refresh_profiles(self):
@@ -499,7 +531,9 @@ class SettingsPanel(QWidget):
     def _save_profile(self):
         name = self._profile_name_input.text().strip()
         if not name:
-            QMessageBox.warning(self, "Save Profile", "Profile name is required.")
+            from geoview_pyside6.widgets.confirm_dialog import ConfirmDialog
+
+            ConfirmDialog("Save Profile", "Profile name is required.", confirm_text="OK", cancel_text="", dialog_type="warning", parent=self).exec()
             return
 
         devices = [d.to_dict() for d in self._config_service.get_devices()]
@@ -510,19 +544,26 @@ class SettingsPanel(QWidget):
         self._refresh_profiles()
         self._profile_name_input.clear()
         self._vessel_input.clear()
-        QMessageBox.information(self, "Profile Saved", f"Profile '{name}' saved with {len(devices)} devices.")
+        from geoview_pyside6.widgets.confirm_dialog import ConfirmDialog
 
+        ConfirmDialog("Profile Saved", f"Profile '{name}' saved with {len(devices)} devices.", confirm_text="OK", cancel_text="", dialog_type="success", parent=self).exec()
     def _load_profile(self):
         filename = self._profile_combo.currentData()
         if not filename:
             return
 
-        reply = QMessageBox.question(
-            self, "Load Profile",
+        from geoview_pyside6.widgets.confirm_dialog import ConfirmDialog
+
+
+        _cdlg = ConfirmDialog(
+            "Load Profile",
             "This will REPLACE current devices and settings. Continue?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            confirm_text="Yes",
+            cancel_text="No",
+            dialog_type="warning",
+            parent=self,
         )
-        if reply != QMessageBox.StandardButton.Yes:
+        if _cdlg.exec() != _cdlg.Accepted:
             return
 
         try:
@@ -532,31 +573,44 @@ class SettingsPanel(QWidget):
             )
             profile = self._profile_service.load_profile(filename)
             if not profile:
-                QMessageBox.warning(self, "Load Error", "Profile not found.")
+                from geoview_pyside6.widgets.confirm_dialog import ConfirmDialog
+
+                ConfirmDialog("Load Error", "Profile not found.", confirm_text="OK", cancel_text="", dialog_type="warning", parent=self).exec()
                 return
 
             self._config_service.import_config(profile)
             self._load_settings()
             self.profile_loaded.emit()
-            QMessageBox.information(
-                self,
+            from geoview_pyside6.widgets.confirm_dialog import ConfirmDialog
+
+            ConfirmDialog(
                 "Profile Loaded",
                 f"Loaded profile: {profile.get('name', filename)}\n"
                 f"Backup created: {restore_point['filename']}",
-            )
+                confirm_text="OK",
+                cancel_text="",
+                dialog_type="success",
+                parent=self,
+            ).exec()
         except Exception as e:
-            QMessageBox.warning(self, "Load Error", str(e))
+            from geoview_pyside6.widgets.confirm_dialog import ConfirmDialog
 
+            ConfirmDialog("Load Error", str(e), confirm_text="OK", cancel_text="", dialog_type="warning", parent=self).exec()
     def _delete_profile(self):
         filename = self._profile_combo.currentData()
         if not filename:
             return
-        reply = QMessageBox.question(
-            self, "Delete Profile",
+        from geoview_pyside6.widgets.confirm_dialog import ConfirmDialog
+
+        _cdlg = ConfirmDialog(
+            "Delete Profile",
             f"Delete profile '{self._profile_combo.currentText()}'?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            confirm_text="Yes",
+            cancel_text="No",
+            dialog_type="warning",
+            parent=self,
         )
-        if reply == QMessageBox.StandardButton.Yes:
+        if _cdlg.exec() == _cdlg.Accepted:
             self._profile_service.delete_profile(filename)
             self._refresh_profiles()
 
@@ -578,15 +632,21 @@ class SettingsPanel(QWidget):
             self._config_service.import_config(config)
             self._load_settings()
             self.profile_loaded.emit()
-            QMessageBox.information(
-                self,
+            from geoview_pyside6.widgets.confirm_dialog import ConfirmDialog
+
+            ConfirmDialog(
                 t("common.import"),
                 "Configuration imported successfully.\n"
                 f"Backup created: {restore_point['filename']}",
-            )
+                confirm_text="OK",
+                cancel_text="",
+                dialog_type="success",
+                parent=self,
+            ).exec()
         except Exception as e:
-            QMessageBox.warning(self, t("common.error"), str(e))
+            from geoview_pyside6.widgets.confirm_dialog import ConfirmDialog
 
+            ConfirmDialog(t("common.error"), str(e), confirm_text="OK", cancel_text="", dialog_type="warning", parent=self).exec()
     def _export_config(self):
         path, _ = QFileDialog.getSaveFileName(
             self, t("settings.export_config"), "portdetector_config.json", "JSON Files (*.json)"
@@ -597,10 +657,13 @@ class SettingsPanel(QWidget):
             config = self._config_service.export_config()
             with open(path, 'w', encoding='utf-8') as f:
                 json.dump(config, f, indent=2, ensure_ascii=False)
-            QMessageBox.information(self, t("common.export"), "Configuration exported successfully.")
-        except Exception as e:
-            QMessageBox.warning(self, t("common.error"), str(e))
+            from geoview_pyside6.widgets.confirm_dialog import ConfirmDialog
 
+            ConfirmDialog(t("common.export"), "Configuration exported successfully.", confirm_text="OK", cancel_text="", dialog_type="success", parent=self).exec()
+        except Exception as e:
+            from geoview_pyside6.widgets.confirm_dialog import ConfirmDialog
+
+            ConfirmDialog(t("common.error"), str(e), confirm_text="OK", cancel_text="", dialog_type="warning", parent=self).exec()
     def retranslate(self):
         """Update all translatable strings to the current language."""
         self._title.setText(t("settings.title"))

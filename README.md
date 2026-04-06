@@ -72,8 +72,8 @@ run.bat
 - **트래픽 캡처**: 관리자 권한 시 네트워크 트래픽 모니터링
 
 ### 서비스 아키텍처
-- **ConfigService**: 설정 관리 (JSON 기반)
-- **LogService**: 로그 관리 (최대 10MB, 2개 백업)
+- **ConfigService**: 설정 관리 (JSON 기반, atomic write로 부분 저장 방지)
+- **LogService**: 로그 관리 (최대 10MB, 2개 백업, write/rotate 동시성 보호, history read snapshot 안전)
 - **ProfileService**: 호스트/포트 프로필 관리
 - **AlertService**: 알림 서비스
 - **UptimeService**: 가동시간 추적

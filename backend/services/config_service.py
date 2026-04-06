@@ -3,6 +3,7 @@
 import json
 import os
 import threading
+from tempfile import NamedTemporaryFile
 from typing import List, Optional
 
 from backend.models.device import Device
@@ -77,8 +78,22 @@ class ConfigService:
             self._next_id = max_num + 1
 
     def _save_raw(self, config):
-        with open(self._config_path, 'w', encoding='utf-8') as f:
-            json.dump(config, f, indent=2, ensure_ascii=False)
+        os.makedirs(self._data_dir, exist_ok=True)
+
+        tmp_path = None
+        try:
+            with NamedTemporaryFile('w', delete=False, dir=self._data_dir, encoding='utf-8') as tmp:
+                tmp_path = tmp.name
+                json.dump(config, tmp, indent=2, ensure_ascii=False)
+                tmp.flush()
+                os.fsync(tmp.fileno())
+            os.replace(tmp_path, self._config_path)
+        finally:
+            if tmp_path and os.path.exists(tmp_path):
+                try:
+                    os.remove(tmp_path)
+                except OSError:
+                    pass
 
     def _save(self):
         config = {
@@ -152,7 +167,7 @@ class ConfigService:
         with self._lock:
             return {
                 "version": 1,
-                "settings": self._settings,
+                "settings": dict(self._settings),
                 "devices": [d.to_dict() for d in self._devices],
             }
 

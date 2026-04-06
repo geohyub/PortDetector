@@ -5,7 +5,7 @@ from datetime import datetime
 
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QPushButton, QStackedWidget, QFrame, QMessageBox,
+    QPushButton, QStackedWidget, QFrame,
     QSystemTrayIcon, QMenu,
 )
 from PySide6.QtCore import Qt, QTimer
@@ -465,8 +465,9 @@ class MainWindow(QMainWindow):
                     self._config_service.add_device(device)
                     self._refresh_devices()
                 except ValueError as e:
-                    QMessageBox.warning(self, t("common.validation_error"), str(e))
+                    from geoview_pyside6.widgets.confirm_dialog import ConfirmDialog
 
+                    ConfirmDialog(t("common.validation_error"), str(e), confirm_text="OK", cancel_text="", dialog_type="warning", parent=self).exec()
     def _on_device_selected(self, device_id):
         self._selected_device_id = device_id
         self._dashboard.set_selected_device(device_id)

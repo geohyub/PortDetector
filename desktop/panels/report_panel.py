@@ -3,7 +3,7 @@
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QTableWidget, QTableWidgetItem, QHeaderView, QComboBox,
-    QFileDialog, QMessageBox,
+    QFileDialog,
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont, QColor
@@ -214,7 +214,9 @@ class ReportPanel(QWidget):
 
     def _export_excel(self):
         if not self._report_data:
-            QMessageBox.information(self, t("common.export"), t("report.export_first"))
+            from geoview_pyside6.widgets.confirm_dialog import ConfirmDialog
+
+            ConfirmDialog(t("common.export"), t("report.export_first"), confirm_text="OK", cancel_text="", dialog_type="success", parent=self).exec()
             return
 
         path, _ = QFileDialog.getSaveFileName(
@@ -231,12 +233,17 @@ class ReportPanel(QWidget):
                 hours,
                 path,
             )
-            QMessageBox.information(self, t("common.export"), t("report.exported", path=saved_path))
-        except ImportError:
-            QMessageBox.warning(self, t("common.error"), "openpyxl is required for Excel export.\npip install openpyxl")
-        except Exception as e:
-            QMessageBox.warning(self, t("common.error"), str(e))
+            from geoview_pyside6.widgets.confirm_dialog import ConfirmDialog
 
+            ConfirmDialog(t("common.export"), t("report.exported", path=saved_path), confirm_text="OK", cancel_text="", dialog_type="success", parent=self).exec()
+        except ImportError:
+            from geoview_pyside6.widgets.confirm_dialog import ConfirmDialog
+
+            ConfirmDialog(t("common.error"), "openpyxl is required for Excel export.\npip install openpyxl", confirm_text="OK", cancel_text="", dialog_type="warning", parent=self).exec()
+        except Exception as e:
+            from geoview_pyside6.widgets.confirm_dialog import ConfirmDialog
+
+            ConfirmDialog(t("common.error"), str(e), confirm_text="OK", cancel_text="", dialog_type="warning", parent=self).exec()
     def retranslate(self):
         """Update all translatable strings to the current language."""
         self._title.setText(t("report.title"))

@@ -1,62 +1,103 @@
-"""PortDetector PySide6 theme — dark theme, colors, fonts, stylesheet."""
+"""
+PortDetector PySide6 theme — thin re-export wrapper over GeoView shared design system.
+
+All standard design tokens (colors, typography, spacing) are sourced from
+geoview_pyside6.constants.  App-specific values (device status colors, sidebar
+palette, monospace font) are kept here.
+
+Migration note (2026-04-04):
+  Colors -> Dark + DeviceColors + app-specific aliases
+  Fonts  -> Font + app-specific sizes
+  STYLESHEET -> kept locally (PortDetector uses its own MainWindow)
+"""
+
+import sys
+from pathlib import Path
+
+# ── Shared design system import ────────────────────────────────────────────
+_shared = str(Path(__file__).resolve().parents[3] / "_shared")
+if _shared not in sys.path:
+    sys.path.insert(0, _shared)
+
+from geoview_pyside6.constants import (  # noqa: F401
+    Dark, Font, Space, Radius, Opacity, DeviceColors,
+)
 
 
+# ── Color Palette — aliases to shared constants + app-specific extras ──────
 class Colors:
-    # Base
-    BG = "#1a1a2e"
-    BG_CARD = "#16213e"
-    BG_INPUT = "#0f3460"
-    BG_ALT = "#1c2541"
-    BORDER = "#2a2a4a"
+    """Color constants — dark theme with cyan accent + device status colors.
+
+    Standard tokens delegate to ``Dark`` and ``DeviceColors``; app-specific
+    values are defined inline.  New code should import ``Dark`` / ``DeviceColors``
+    directly.
+    """
+
+    # Base — sourced from Dark
+    BG       = Dark.BG
+    BG_CARD  = Dark.NAVY
+    BG_INPUT = Dark.DARK
+    BG_ALT   = Dark.BG_ALT
+
+    # Borders — app-specific (PortDetector uses purple-tinted borders)
+    BORDER       = "#2a2a4a"
     BORDER_LIGHT = "#3a3a5a"
 
-    # Text
-    TEXT = "#e0e0e0"
-    TEXT_DIM = "#8888aa"
+    # Text — app-specific (PortDetector uses slightly different text tones)
+    TEXT       = "#e0e0e0"
+    TEXT_DIM   = "#8888aa"
     TEXT_MUTED = "#6a6a8a"
 
-    # Accent
-    ACCENT = "#00b4d8"
-    ACCENT_HOVER = "#0096c7"
-    ACCENT_DIM = "#00b4d81a"
+    # Accent — sourced from Dark
+    ACCENT       = Dark.CYAN
+    ACCENT_HOVER = "#0096c7"                       # app-specific
+    ACCENT_DIM   = f"{Dark.CYAN}{Opacity.LOW}"     # 10% opacity
 
-    # Status
-    CONNECTED = "#06d6a0"
-    CONNECTED_DIM = "#06d6a01a"
-    DISCONNECTED = "#ef476f"
-    DISCONNECTED_DIM = "#ef476f1a"
-    DELAYED = "#ffd166"
-    DELAYED_DIM = "#ffd1661a"
+    # Device status — sourced from DeviceColors
+    CONNECTED        = DeviceColors.CONNECTED
+    CONNECTED_DIM    = f"{DeviceColors.CONNECTED}{Opacity.LOW}"
+    DISCONNECTED     = DeviceColors.DISCONNECTED
+    DISCONNECTED_DIM = f"{DeviceColors.DISCONNECTED}{Opacity.LOW}"
+    DELAYED          = DeviceColors.DELAYED
+    DELAYED_DIM      = f"{DeviceColors.DELAYED}{Opacity.LOW}"
 
-    # Ports
-    OPEN = "#06d6a0"
-    CLOSED = "#ef476f"
-    FILTERED = "#ffd166"
+    # Port status — sourced from DeviceColors
+    OPEN     = DeviceColors.CONNECTED
+    CLOSED   = DeviceColors.DISCONNECTED
+    FILTERED = DeviceColors.FILTERED
 
-    # Sidebar
-    SIDEBAR_BG = "#111128"
-    SIDEBAR_HOVER = "#1a1a3e"
-    SIDEBAR_ACTIVE = "#00b4d820"
-    SIDEBAR_ACTIVE_BORDER = "#00b4d8"
+    # Sidebar — app-specific (dark indigo sidebar)
+    SIDEBAR_BG            = "#111128"
+    SIDEBAR_HOVER         = "#1a1a3e"
+    SIDEBAR_ACTIVE        = f"{Dark.CYAN}20"       # 12% opacity
+    SIDEBAR_ACTIVE_BORDER = Dark.CYAN
 
-    # Misc
-    DANGER = "#ef476f"
-    WARNING = "#ffd166"
-    SUCCESS = "#06d6a0"
-    INFO = "#00b4d8"
+    # Semantic status — sourced from DeviceColors
+    DANGER  = DeviceColors.DISCONNECTED
+    WARNING = DeviceColors.DELAYED
+    SUCCESS = DeviceColors.CONNECTED
+    INFO    = Dark.CYAN
 
 
+# ── Font constants — aliases to shared Font + app-specific extras ──────────
 class Fonts:
-    FAMILY = "Pretendard"
-    MONO = "Cascadia Code"
-    SIZE_XS = 12
-    SIZE_SM = 13
-    SIZE_MD = 14
-    SIZE_LG = 16
-    SIZE_XL = 20
-    SIZE_TITLE = 26
+    """Font sizes and families.
+
+    Standard tokens delegate to ``Font``; app-specific sizes are defined
+    inline.  New code should import ``Font`` directly.
+    """
+
+    FAMILY     = Font.SANS      # "Pretendard"
+    MONO       = "Cascadia Code"  # app-specific monospace
+    SIZE_XS    = 12             # app-specific (between Font.XS 11 and Font.SM 13)
+    SIZE_SM    = Font.SM        # 13
+    SIZE_MD    = Font.BASE      # 14
+    SIZE_LG    = 16             # app-specific (Font.MD is 15)
+    SIZE_XL    = 20             # app-specific (between Font.LG 17 and Font.XL 22)
+    SIZE_TITLE = Font.XXL       # 26
 
 
+# ── Stylesheet ──────────────────────────────────────────────────────────────
 STYLESHEET = f"""
 QWidget {{
     background-color: {Colors.BG};
@@ -89,7 +130,7 @@ QWidget {{
     background-color: {Colors.SIDEBAR_ACTIVE};
     border-left: 3px solid {Colors.SIDEBAR_ACTIVE_BORDER};
     color: {Colors.ACCENT};
-    font-weight: 500;
+    font-weight: {Font.MEDIUM};
 }}
 
 /* Top Bar */
@@ -104,7 +145,7 @@ QWidget {{
 }}
 #topbar_title {{
     font-size: {Fonts.SIZE_LG}px;
-    font-weight: 600;
+    font-weight: {Font.SEMIBOLD};
     color: {Colors.TEXT};
 }}
 #topbar_version {{
@@ -116,7 +157,7 @@ QWidget {{
 .device-card {{
     background-color: {Colors.BG_CARD};
     border: 1px solid {Colors.BORDER};
-    border-radius: 6px;
+    border-radius: {Radius.SM}px;
 }}
 .device-card:hover {{
     border-color: {Colors.BORDER_LIGHT};
@@ -147,7 +188,7 @@ QHeaderView::section {{
     border-bottom: 1px solid {Colors.BORDER_LIGHT};
     font-family: "{Fonts.FAMILY}", "Segoe UI";
     font-size: {Fonts.SIZE_SM}px;
-    font-weight: 500;
+    font-weight: {Font.MEDIUM};
     padding: 6px 8px;
 }}
 
@@ -176,7 +217,7 @@ QPushButton#btn_primary {{
     background-color: {Colors.ACCENT};
     border-color: {Colors.ACCENT};
     color: #ffffff;
-    font-weight: 500;
+    font-weight: {Font.MEDIUM};
 }}
 QPushButton#btn_primary:hover {{
     background-color: {Colors.ACCENT_HOVER};
@@ -244,7 +285,7 @@ QTabBar::tab {{
 QTabBar::tab:selected {{
     background-color: {Colors.BG};
     color: {Colors.ACCENT};
-    font-weight: 500;
+    font-weight: {Font.MEDIUM};
 }}
 
 /* Progress bar */

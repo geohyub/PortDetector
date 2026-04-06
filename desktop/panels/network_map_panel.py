@@ -11,7 +11,7 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QLineEdit, QProgressBar, QGraphicsScene, QGraphicsView,
     QGraphicsEllipseItem, QGraphicsTextItem, QGraphicsLineItem,
-    QFileDialog, QMessageBox, QInputDialog, QComboBox, QFrame,
+    QFileDialog, QInputDialog, QComboBox, QFrame,
     QSplitter, QTableWidget, QTableWidgetItem, QHeaderView,
 )
 from PySide6.QtCore import Qt, Signal, QRectF, QPointF
@@ -688,7 +688,9 @@ class NetworkMapPanel(QWidget):
 
     def _export_png(self):
         if not self._nodes:
-            QMessageBox.information(self, t("common.export"), t("netmap.no_hosts"))
+            from geoview_pyside6.widgets.confirm_dialog import ConfirmDialog
+
+            ConfirmDialog(t("common.export"), t("netmap.no_hosts"), confirm_text="OK", cancel_text="", dialog_type="success", parent=self).exec()
             return
 
         path, _ = QFileDialog.getSaveFileName(
@@ -696,11 +698,14 @@ class NetworkMapPanel(QWidget):
         )
         if path:
             self._topo_view.export_to_image(path)
-            QMessageBox.information(self, t("common.export"), f"Exported: {os.path.basename(path)}")
+            from geoview_pyside6.widgets.confirm_dialog import ConfirmDialog
 
+            ConfirmDialog(t("common.export"), f"Exported: {os.path.basename(path)}", confirm_text="OK", cancel_text="", dialog_type="success", parent=self).exec()
     def _export_csv(self):
         if not self._nodes:
-            QMessageBox.information(self, t("common.export"), t("netmap.no_hosts"))
+            from geoview_pyside6.widgets.confirm_dialog import ConfirmDialog
+
+            ConfirmDialog(t("common.export"), t("netmap.no_hosts"), confirm_text="OK", cancel_text="", dialog_type="success", parent=self).exec()
             return
 
         path, _ = QFileDialog.getSaveFileName(
@@ -724,8 +729,9 @@ class NetworkMapPanel(QWidget):
                     n.get('user_label', ''),
                     t("netmap.online") if n.get('online') else t("netmap.offline"),
                 ])
-        QMessageBox.information(self, t("common.export"), f"Exported: {os.path.basename(path)}")
+        from geoview_pyside6.widgets.confirm_dialog import ConfirmDialog
 
+        ConfirmDialog(t("common.export"), f"Exported: {os.path.basename(path)}", confirm_text="OK", cancel_text="", dialog_type="success", parent=self).exec()
     # ── Retranslate ──
 
     def retranslate(self):
