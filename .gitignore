@@ -14,3 +14,7 @@ venv/
 node_modules/
 .playwright-mcp/
 
+
+# Local secrets
+data/portdetector.secret
+*.secret

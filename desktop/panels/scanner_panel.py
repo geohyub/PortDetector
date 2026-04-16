@@ -143,11 +143,15 @@ class ScannerPanel(QWidget):
         self._worker.progress.connect(self._on_progress)
         self._worker.result.connect(self._on_result)
         self._worker.complete.connect(self._on_complete)
+        self._worker.finished.connect(self._worker.deleteLater)
+        self._worker.finished.connect(lambda worker=self._worker: self._clear_worker(worker))
         self._worker.start()
 
     def _stop_scan(self):
         if self._worker:
             self._worker.stop()
+            if hasattr(self._worker, "quit"):
+                self._worker.quit()
 
     def _on_progress(self, data):
         total = data.get('total', 1)
@@ -182,7 +186,6 @@ class ScannerPanel(QWidget):
         self._scan_btn.setEnabled(True)
         self._stop_btn.setEnabled(False)
         self._progress.setVisible(False)
-        self._worker = None
 
         open_p = data.get('open_ports', 0)
         closed_p = data.get('closed_ports', 0)
@@ -190,6 +193,10 @@ class ScannerPanel(QWidget):
         self._summary_label.setText(
             t("scanner.complete", total=total_p, open=open_p, closed=closed_p)
         )
+
+    def _clear_worker(self, worker):
+        if self._worker is worker:
+            self._worker = None
 
     def _mono_font(self):
         from PySide6.QtGui import QFont

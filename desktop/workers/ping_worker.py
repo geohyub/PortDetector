@@ -113,27 +113,34 @@ class PingWorkerThread(QThread):
                     if prev != status:
                         self._prev_status[device.id] = status
                         if prev is not None:
-                            self._log_service.log_event(
-                                device.id,
-                                device.ip,
-                                status,
-                                rtt_ms,
-                                device_name=device.name,
-                                category=device.category,
-                                importance=getattr(device, 'importance', 'standard'),
-                                description=device.description,
-                                ports=list(device.ports),
-                                old_status=prev,
-                                reason=build_status_reason(status, rtt_ms, self._delay_threshold),
-                            )
-                            self.signals.status_change.emit({
-                                'device_id': device.id,
-                                'ip': device.ip,
-                                'name': device.name,
-                                'old_status': prev,
-                                'new_status': status,
-                                'timestamp': now,
-                            })
+                            try:
+                                self._log_service.log_event(
+                                    device.id,
+                                    device.ip,
+                                    status,
+                                    rtt_ms,
+                                    device_name=device.name,
+                                    category=device.category,
+                                    importance=getattr(device, 'importance', 'standard'),
+                                    description=device.description,
+                                    ports=list(device.ports),
+                                    old_status=prev,
+                                    reason=build_status_reason(status, rtt_ms, self._delay_threshold),
+                                )
+                            except Exception:
+                                # Keep monitoring even if the history sink is unavailable.
+                                pass
+                            try:
+                                self.signals.status_change.emit({
+                                    'device_id': device.id,
+                                    'ip': device.ip,
+                                    'name': device.name,
+                                    'old_status': prev,
+                                    'new_status': status,
+                                    'timestamp': now,
+                                })
+                            except Exception:
+                                pass
 
             if results:
                 self.signals.batch_update.emit(results)

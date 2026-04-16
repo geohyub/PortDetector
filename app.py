@@ -1,137 +1,189 @@
 """PortDetector - Ship Network Monitoring Tool."""
 
+from __future__ import annotations
+
+import argparse
 import atexit
 import os
 import sys
 import threading
 import webbrowser
 
-from flask import Flask, render_template
-from flask_socketio import SocketIO
-
 from config import APP_NAME, VERSION, DEFAULT_WEB_PORT, load_or_create_secret_key
 
-# Path resolution for PyInstaller
-if getattr(sys, 'frozen', False):
-    BASE_DIR = os.path.dirname(sys.executable)
-    BUNDLE_DIR = sys._MEIPASS
-else:
-    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-    BUNDLE_DIR = BASE_DIR
+def _resolve_base_dir() -> str:
+    if getattr(sys, 'frozen', False):
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.abspath(__file__))
+
+
+def _resolve_bundle_dir() -> str:
+    if getattr(sys, 'frozen', False):
+        return sys._MEIPASS
+    return _resolve_base_dir()
+
+
+def _resolve_entrypoint() -> str:
+    if getattr(sys, 'frozen', False):
+        return sys.executable
+    return os.path.abspath(__file__)
+
+
+BASE_DIR = _resolve_base_dir()
+BUNDLE_DIR = _resolve_bundle_dir()
 
 DATA_DIR = os.path.join(BASE_DIR, 'data')
 TEMPLATE_DIR = os.path.join(BUNDLE_DIR, 'frontend', 'templates')
 STATIC_DIR = os.path.join(BUNDLE_DIR, 'frontend', 'static')
 
-# Flask app
-app = Flask(
-    __name__,
-    template_folder=TEMPLATE_DIR,
-    static_folder=STATIC_DIR,
-)
-app.config['SECRET_KEY'] = load_or_create_secret_key(DATA_DIR)
 
-# Same-origin only; the app serves its own frontend from 127.0.0.1.
-socketio = SocketIO(app, async_mode='threading')
-
-# Services
-from backend.services.config_service import ConfigService
-from backend.services.log_service import LogService
-
-config_service = ConfigService(DATA_DIR)
-log_service = LogService(DATA_DIR)
-
-# Workers
-from backend.workers.ping_worker import PingWorker
-from backend.workers.scan_worker import ScanWorker
-from backend.workers.interface_worker import InterfaceWorker
-from backend.workers.scheduler import Scheduler
-
-settings = config_service.get_settings()
-
-ping_worker = PingWorker(
-    config_service, log_service, socketio,
-    delay_threshold_ms=settings.get('delay_threshold_ms', 200),
-)
-scan_worker = ScanWorker(socketio)
-interface_worker = InterfaceWorker(socketio)
-
-# Traffic capture (requires admin privileges)
-from backend.services.traffic_service import TrafficService
-traffic_service = TrafficService()
-
-scheduler = Scheduler(ping_worker, scan_worker, interface_worker)
-
-# Routes
-from backend.routes import api, init_routes
-
-init_routes(config_service, log_service, scan_worker, interface_worker, ping_worker, socketio, traffic_service)
-app.register_blueprint(api)
-
-# SocketIO events
-from backend.socketio_events import register_socketio_events
-
-register_socketio_events(socketio, scan_worker, scheduler)
+def build_arg_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description=f"{APP_NAME} web startup")
+    parser.add_argument(
+        "--doctor",
+        action="store_true",
+        help="Run a local-only preflight check and exit.",
+    )
+    parser.add_argument(
+        "--doctor-export",
+        metavar="PATH",
+        help="Write the doctor operator packet to PATH as JSON and exit.",
+    )
+    return parser
 
 
-@app.route('/')
-def index():
-    return render_template('index.html', version=VERSION)
+def build_runtime_context() -> dict[str, object]:
+    return {
+        "mode": "packaged" if getattr(sys, "frozen", False) else "source",
+        "is_frozen": bool(getattr(sys, "frozen", False)),
+        "base_dir": _resolve_base_dir(),
+        "bundle_dir": _resolve_bundle_dir(),
+        "entrypoint": _resolve_entrypoint(),
+    }
 
 
-def start_tray_icon(port):
-    """Start system tray icon in a separate thread."""
-    try:
-        from pystray import Icon, Menu, MenuItem
-        from PIL import Image
+def run_doctor(export_path: str | None = None) -> int:
+    from backend.services.doctor_service import (
+        export_operator_packet,
+        print_preflight,
+        run_preflight,
+    )
 
-        icon_path = os.path.join(BUNDLE_DIR, 'assets', 'icon.ico')
-        if os.path.exists(icon_path):
-            image = Image.open(icon_path)
-        else:
-            # Create a simple colored icon if .ico not found
-            image = Image.new('RGB', (64, 64), color=(0, 180, 216))
-
-        def open_browser(icon, item):
-            webbrowser.open("http://127.0.0.1:{}".format(port))
-
-        def quit_app(icon, item):
-            icon.stop()
-            scheduler.stop_all()
-            os._exit(0)
-
-        menu = Menu(
-            MenuItem("{} v{}".format(APP_NAME, VERSION), None, enabled=False),
-            Menu.SEPARATOR,
-            MenuItem("Open Browser", open_browser, default=True),
-            MenuItem("Exit", quit_app),
-        )
-
-        icon = Icon(APP_NAME, image, "{} - Running".format(APP_NAME), menu)
-        icon.run()
-    except ImportError:
-        pass  # pystray not available, skip tray icon
+    report = run_preflight(DATA_DIR, "web", runtime_context=build_runtime_context())
+    if export_path:
+        saved_path = export_operator_packet(report, export_path)
+        print(f"Operator packet written to {saved_path}")
+    return print_preflight(report)
 
 
-def cleanup():
-    scheduler.stop_all()
-    traffic_service.stop()
+def run_web_app() -> int:
+    from flask import Flask, render_template
+    from flask_socketio import SocketIO
 
+    # Flask app
+    app = Flask(
+        __name__,
+        template_folder=TEMPLATE_DIR,
+        static_folder=STATIC_DIR,
+    )
+    app.config['SECRET_KEY'] = load_or_create_secret_key(DATA_DIR)
 
-atexit.register(cleanup)
+    # Same-origin only; the app serves its own frontend from 127.0.0.1.
+    socketio = SocketIO(app, async_mode='threading')
 
-def _is_port_in_use(port: int) -> bool:
-    """Check if a TCP port is already bound (another instance likely running)."""
-    import socket
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+    # Services
+    from backend.services.config_service import ConfigService
+    from backend.services.log_service import LogService
+
+    config_service = ConfigService(DATA_DIR)
+    log_service = LogService(DATA_DIR)
+
+    # Workers
+    from backend.workers.ping_worker import PingWorker
+    from backend.workers.scan_worker import ScanWorker
+    from backend.workers.interface_worker import InterfaceWorker
+    from backend.workers.scheduler import Scheduler
+
+    settings = config_service.get_settings()
+
+    ping_worker = PingWorker(
+        config_service, log_service, socketio,
+        delay_threshold_ms=settings.get('delay_threshold_ms', 200),
+    )
+    scan_worker = ScanWorker(socketio)
+    interface_worker = InterfaceWorker(socketio)
+
+    # Traffic capture (requires admin privileges)
+    from backend.services.traffic_service import TrafficService
+
+    traffic_service = TrafficService()
+
+    scheduler = Scheduler(ping_worker, scan_worker, interface_worker)
+
+    # Routes
+    from backend.routes import api, init_routes
+
+    init_routes(config_service, log_service, scan_worker, interface_worker, ping_worker, socketio, traffic_service)
+    app.register_blueprint(api)
+
+    # SocketIO events
+    from backend.socketio_events import register_socketio_events
+
+    register_socketio_events(socketio, scan_worker, scheduler)
+
+    @app.route('/')
+    def index():
+        return render_template('index.html', version=VERSION)
+
+    def start_tray_icon(port):
+        """Start system tray icon in a separate thread."""
         try:
-            s.bind(('127.0.0.1', port))
-            return False
-        except OSError:
-            return True
+            from pystray import Icon, Menu, MenuItem
+            from PIL import Image
 
+            icon_path = os.path.join(BUNDLE_DIR, 'assets', 'icon.ico')
+            if os.path.exists(icon_path):
+                image = Image.open(icon_path)
+            else:
+                # Create a simple colored icon if .ico not found
+                image = Image.new('RGB', (64, 64), color=(0, 180, 216))
 
-if __name__ == '__main__':
+            def open_browser(icon, item):
+                webbrowser.open("http://127.0.0.1:{}".format(port))
+
+            def quit_app(icon, item):
+                icon.stop()
+                scheduler.stop_all()
+                os._exit(0)
+
+            menu = Menu(
+                MenuItem("{} v{}".format(APP_NAME, VERSION), None, enabled=False),
+                Menu.SEPARATOR,
+                MenuItem("Open Browser", open_browser, default=True),
+                MenuItem("Exit", quit_app),
+            )
+
+            icon = Icon(APP_NAME, image, "{} - Running".format(APP_NAME), menu)
+            icon.run()
+        except ImportError:
+            pass  # pystray not available, skip tray icon
+
+    def cleanup():
+        scheduler.stop_all()
+        traffic_service.stop()
+
+    atexit.register(cleanup)
+
+    def _is_port_in_use(port: int) -> bool:
+        """Check if a TCP port is already bound (another instance likely running)."""
+        import socket
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            try:
+                s.bind(('127.0.0.1', port))
+                return False
+            except OSError:
+                return True
+
     port = settings.get('web_port', DEFAULT_WEB_PORT)
 
     # ── Single instance guard (web mode) ──
@@ -140,7 +192,7 @@ if __name__ == '__main__':
               f"Another PortDetector instance may be running.")
         print(f"Opening browser to existing instance...")
         webbrowser.open(f"http://127.0.0.1:{port}")
-        sys.exit(0)
+        return 0
 
     # Start traffic capture (admin only, graceful fallback)
     traffic_service.start()
@@ -166,3 +218,15 @@ if __name__ == '__main__':
     print("{} v{} starting on http://127.0.0.1:{}".format(APP_NAME, VERSION, port))
 
     socketio.run(app, host='127.0.0.1', port=port, debug=False, allow_unsafe_werkzeug=True)
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_arg_parser().parse_args(argv)
+    if args.doctor:
+        return run_doctor(args.doctor_export)
+    return run_web_app()
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())

@@ -7,6 +7,7 @@ from tempfile import NamedTemporaryFile
 from typing import List, Optional
 
 from backend.models.device import Device
+from backend.services.import_validation import validate_config_payload
 from config import (
     DEFAULT_PING_INTERVAL,
     DEFAULT_INTERFACE_POLL_INTERVAL,
@@ -60,8 +61,12 @@ class ConfigService:
                 config = self._default_config()
                 self._save_raw(config)
             else:
-                with open(self._config_path, 'r', encoding='utf-8') as f:
-                    config = json.load(f)
+                try:
+                    with open(self._config_path, 'r', encoding='utf-8') as f:
+                        config = validate_config_payload(json.load(f))
+                except (json.JSONDecodeError, OSError, ValueError):
+                    config = self._default_config()
+                    self._save_raw(config)
 
             default_settings = self._default_config()['settings']
             self._settings = {**default_settings, **config.get('settings', {})}
@@ -173,9 +178,9 @@ class ConfigService:
 
     def import_config(self, config: dict):
         with self._lock:
-            defaults = self._default_config()['settings']
-            self._settings = {**defaults, **config.get('settings', self._settings)}
-            self._devices = [Device.from_dict(d) for d in config.get('devices', [])]
+            validated = validate_config_payload(config)
+            self._settings = validated['settings']
+            self._devices = [Device.from_dict(d) for d in validated['devices']]
             max_num = 0
             for dev in self._devices:
                 if dev.id.startswith('dev_'):

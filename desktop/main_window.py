@@ -8,7 +8,7 @@ from PySide6.QtWidgets import (
     QPushButton, QStackedWidget, QFrame,
     QSystemTrayIcon, QMenu,
 )
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QTimer, QSettings
 from PySide6.QtGui import QIcon, QPixmap, QImage, QAction
 
 from config import APP_NAME, VERSION
@@ -53,6 +53,7 @@ class MainWindow(QMainWindow):
     def __init__(self, config_service, log_service, traffic_service,
                  profile_service, alert_service, backup_service, uptime_service):
         super().__init__()
+        self._window_settings = QSettings("GeoView", APP_NAME, self)
         self._config_service = config_service
         self._log_service = log_service
         self._traffic_service = traffic_service
@@ -76,6 +77,7 @@ class MainWindow(QMainWindow):
         self.setStyleSheet(STYLESHEET)
 
         self._build_ui()
+        self._restore_window_state()
         self._setup_workers()
         self._setup_tray()
 
@@ -270,6 +272,7 @@ class MainWindow(QMainWindow):
         )
         self._ping_worker.signals.batch_update.connect(self._on_ping_update)
         self._ping_worker.signals.status_change.connect(self._on_status_change)
+        self._bind_worker_lifecycle("_ping_worker", self._ping_worker)
         self._ping_worker.set_interval(settings.get('ping_interval_seconds', 5))
         self._ping_worker.start()
 
@@ -278,12 +281,14 @@ class MainWindow(QMainWindow):
             interval=settings.get('interface_poll_seconds', 3)
         )
         self._interface_worker.update.connect(self._on_interface_update)
+        self._bind_worker_lifecycle("_interface_worker", self._interface_worker)
         self._interface_worker.start()
 
         # Serial worker
         self._serial_worker = SerialWorkerThread(interval=5)
         self._serial_worker.update.connect(self._on_serial_update)
         self._serial_worker.set_ports(self._serial.get_monitored_ports())
+        self._bind_worker_lifecycle("_serial_worker", self._serial_worker)
         self._serial_worker.start()
 
         # RTT graph refresh timer
@@ -645,29 +650,72 @@ class MainWindow(QMainWindow):
             self.activateWindow()
 
     def _quit(self):
+        self._save_window_state()
         self._stop_workers()
         from PySide6.QtWidgets import QApplication
         QApplication.quit()
 
     def _stop_workers(self):
-        if self._ping_worker:
-            self._ping_worker.stop()
-            self._ping_worker.wait(3000)
-        if self._interface_worker:
-            self._interface_worker.stop()
-            self._interface_worker.wait(3000)
-        if self._serial_worker:
-            self._serial_worker.stop()
-            self._serial_worker.wait(3000)
+        self._stop_worker("_ping_worker")
+        self._stop_worker("_interface_worker")
+        self._stop_worker("_serial_worker")
         if hasattr(self, '_network_map'):
             self._network_map.stop_workers()
         if self._traffic_service:
             self._traffic_service.stop()
 
     def closeEvent(self, event):
+        self._save_window_state()
         if hasattr(self, '_tray') and self._tray.isVisible():
             self.hide()
             event.ignore()
         else:
             self._stop_workers()
             event.accept()
+
+    def _bind_worker_lifecycle(self, worker_attr: str, worker):
+        worker.finished.connect(worker.deleteLater)
+        worker.finished.connect(
+            lambda worker=worker, worker_attr=worker_attr: self._clear_worker_ref(worker_attr, worker)
+        )
+
+    def _clear_worker_ref(self, worker_attr: str, worker):
+        if getattr(self, worker_attr, None) is worker:
+            setattr(self, worker_attr, None)
+
+    def _stop_worker(self, worker_attr: str):
+        worker = getattr(self, worker_attr, None)
+        if not worker:
+            return
+
+        stop = getattr(worker, "stop", None)
+        if callable(stop):
+            stop()
+
+        quit_fn = getattr(worker, "quit", None)
+        if callable(quit_fn):
+            quit_fn()
+
+        wait_fn = getattr(worker, "wait", None)
+        if callable(wait_fn):
+            wait_fn(3000)
+
+        if not getattr(worker, "isRunning", lambda: False)():
+            worker.deleteLater()
+            self._clear_worker_ref(worker_attr, worker)
+
+    def _restore_window_state(self):
+        geometry = self._window_settings.value("geometry")
+        if geometry:
+            self.restoreGeometry(geometry)
+        window_state = self._window_settings.value("windowState")
+        if window_state:
+            self.restoreState(window_state)
+        if hasattr(self, "_stack"):
+            self._switch_page(self._window_settings.value("current_page", 0, type=int))
+
+    def _save_window_state(self):
+        self._window_settings.setValue("geometry", self.saveGeometry())
+        self._window_settings.setValue("windowState", self.saveState())
+        if hasattr(self, "_stack"):
+            self._window_settings.setValue("current_page", self._stack.currentIndex())

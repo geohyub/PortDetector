@@ -79,8 +79,11 @@ def import_config():
     data = request.get_json()
     if not data:
         return jsonify({'error': 'No data provided'}), 400
-    config_service.import_config(data)
-    return jsonify({'success': True})
+    try:
+        config_service.import_config(data)
+        return jsonify({'success': True})
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
 
 
 @api.route('/api/scan', methods=['POST'])

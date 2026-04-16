@@ -90,12 +90,13 @@ class TraceroutePanel(QWidget):
 
         self._worker = TracerouteWorkerThread(ip)
         self._worker.complete.connect(self._on_complete)
+        self._worker.finished.connect(self._worker.deleteLater)
+        self._worker.finished.connect(lambda worker=self._worker: self._clear_worker(worker))
         self._worker.start()
 
     def _on_complete(self, hops):
         self._trace_btn.setEnabled(True)
         self._status_label.setText(t("traceroute.complete", count=len(hops)))
-        self._worker = None
 
         for hop in hops:
             row = self._table.rowCount()
@@ -117,6 +118,10 @@ class TraceroutePanel(QWidget):
                     from PySide6.QtGui import QColor
                     item.setForeground(QColor(Colors.WARNING))
                 self._table.setItem(row, col, item)
+
+    def _clear_worker(self, worker):
+        if self._worker is worker:
+            self._worker = None
 
     def retranslate(self):
         """Update all translatable strings to current language."""

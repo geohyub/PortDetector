@@ -97,17 +97,26 @@ class PingWorker:
                 if prev != status:
                     self._prev_status[device.id] = status
                     if prev is not None:
-                        self._log_service.log_event(
-                            device.id, device.ip, status, rtt_ms
-                        )
-                        self._socketio.emit('status_change', {
-                            'device_id': device.id,
-                            'ip': device.ip,
-                            'name': device.name,
-                            'old_status': prev,
-                            'new_status': status,
-                            'timestamp': now,
-                        })
+                        # Best-effort history/notification side effects must not
+                        # stop the monitoring loop if local storage or SocketIO
+                        # is temporarily unavailable.
+                        try:
+                            self._log_service.log_event(
+                                device.id, device.ip, status, rtt_ms
+                            )
+                        except Exception:
+                            pass
+                        try:
+                            self._socketio.emit('status_change', {
+                                'device_id': device.id,
+                                'ip': device.ip,
+                                'name': device.name,
+                                'old_status': prev,
+                                'new_status': status,
+                                'timestamp': now,
+                            })
+                        except Exception:
+                            pass
 
             if results:
                 self._socketio.emit('batch_ping_update', results)

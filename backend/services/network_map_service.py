@@ -7,6 +7,7 @@ import socket
 import subprocess
 import uuid
 from dataclasses import dataclass, field, asdict
+from tempfile import NamedTemporaryFile
 from typing import Dict, List, Optional
 
 
@@ -140,6 +141,21 @@ class NetworkMapService:
         self._layouts_dir = os.path.join(data_dir, 'layouts')
         os.makedirs(self._layouts_dir, exist_ok=True)
 
+    def _resolve_layout_path(self, filename: str) -> Optional[str]:
+        safe_name = os.path.basename(filename or "")
+        if not safe_name or safe_name != filename:
+            return None
+
+        path = os.path.join(self._layouts_dir, safe_name)
+        try:
+            layouts_dir = os.path.realpath(self._layouts_dir)
+            resolved = os.path.realpath(path)
+            if not (resolved == layouts_dir or resolved.startswith(layouts_dir + os.sep)):
+                return None
+        except OSError:
+            return None
+        return path
+
     def save_layout(self, name: str, nodes: List[MapNode]) -> str:
         """Save node positions + labels to a JSON file."""
         safe_name = re.sub(r'[^\w\-.]', '_', name)
@@ -151,17 +167,34 @@ class NetworkMapService:
             'name': name,
             'nodes': [n.to_dict() for n in nodes],
         }
-        with open(path, 'w', encoding='utf-8') as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
+        tmp_path = None
+        try:
+            with NamedTemporaryFile('w', delete=False, dir=self._layouts_dir, encoding='utf-8') as f:
+                tmp_path = f.name
+                json.dump(data, f, indent=2, ensure_ascii=False)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp_path, path)
+        finally:
+            if tmp_path and os.path.exists(tmp_path):
+                try:
+                    os.remove(tmp_path)
+                except OSError:
+                    pass
         return path
 
     def load_layout(self, filename: str) -> List[MapNode]:
         """Load layout from file. Returns list of MapNodes."""
-        path = os.path.join(self._layouts_dir, filename)
+        path = self._resolve_layout_path(filename)
+        if path is None:
+            return []
         if not os.path.exists(path):
             return []
-        with open(path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+        except (json.JSONDecodeError, OSError):
+            return []
         return [MapNode.from_dict(d) for d in data.get('nodes', [])]
 
     def list_layouts(self) -> List[dict]:
@@ -181,5 +214,5 @@ class NetworkMapService:
                         'node_count': len(data.get('nodes', [])),
                     })
                 except Exception:
-                    layouts.append({'filename': fname, 'name': fname, 'node_count': 0})
+                    continue
         return layouts

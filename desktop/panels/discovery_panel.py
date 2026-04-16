@@ -108,6 +108,8 @@ class DiscoveryPanel(QWidget):
         self._worker = DiscoveryWorkerThread(subnet)
         self._worker.progress.connect(self._on_progress)
         self._worker.complete.connect(self._on_complete)
+        self._worker.finished.connect(self._worker.deleteLater)
+        self._worker.finished.connect(lambda worker=self._worker: self._clear_worker(worker))
         self._worker.start()
 
     def _on_progress(self, scanned, total, found_count):
@@ -121,7 +123,6 @@ class DiscoveryPanel(QWidget):
         self._discover_btn.setEnabled(True)
         self._progress.setVisible(False)
         self._status_label.setText(t("discovery.complete", count=len(results)))
-        self._worker = None
 
         for host in results:
             row = self._table.rowCount()
@@ -136,6 +137,10 @@ class DiscoveryPanel(QWidget):
             self._table.setItem(row, 1, rtt_item)
 
             self._table.setItem(row, 2, QTableWidgetItem(host.get('hostname', '')))
+
+    def _clear_worker(self, worker):
+        if self._worker is worker:
+            self._worker = None
 
     def retranslate(self):
         """Update all translatable strings to current language."""

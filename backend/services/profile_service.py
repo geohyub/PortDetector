@@ -4,7 +4,11 @@ import json
 import os
 import shutil
 from datetime import datetime
+from pathlib import Path
+from tempfile import NamedTemporaryFile
 from typing import List, Optional
+
+from backend.services.import_validation import validate_profile_payload
 
 
 class ProfileService:
@@ -12,6 +16,25 @@ class ProfileService:
         self._profiles_dir = os.path.join(data_dir, 'profiles')
         os.makedirs(self._profiles_dir, exist_ok=True)
         self._active_profile = None  # None = default (devices.json)
+
+    def _safe_profile_name(self, name: str) -> str:
+        safe_name = "".join(c for c in (name or "") if c.isalnum() or c in '-_ ').strip()
+        return safe_name or "profile"
+
+    def _resolve_profile_path(self, filename: str) -> Optional[Path]:
+        safe_name = os.path.basename(filename or "")
+        if not safe_name or safe_name != filename:
+            return None
+
+        path = Path(self._profiles_dir) / safe_name
+        try:
+            profiles_dir = Path(self._profiles_dir).resolve()
+            resolved = path.resolve()
+            if profiles_dir not in resolved.parents and resolved != profiles_dir:
+                return None
+        except OSError:
+            return None
+        return path
 
     def list_profiles(self) -> List[dict]:
         """List all saved profiles with metadata."""
@@ -22,7 +45,7 @@ class ProfileService:
             path = os.path.join(self._profiles_dir, fname)
             try:
                 with open(path, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
+                    data = validate_profile_payload(json.load(f))
                 profiles.append({
                     'name': data.get('name', fname.replace('.json', '')),
                     'filename': fname,
@@ -38,9 +61,9 @@ class ProfileService:
     def save_profile(self, name: str, devices: list, settings: dict,
                      vessel: str = '', description: str = '') -> str:
         """Save current device config as a named profile."""
-        safe_name = "".join(c for c in name if c.isalnum() or c in '-_ ').strip()
+        safe_name = self._safe_profile_name(name)
         filename = f"{safe_name}.json"
-        path = os.path.join(self._profiles_dir, filename)
+        path = Path(self._profiles_dir) / filename
 
         profile = {
             'name': name,
@@ -51,22 +74,37 @@ class ProfileService:
             'devices': devices,
         }
 
-        with open(path, 'w', encoding='utf-8') as f:
-            json.dump(profile, f, indent=2, ensure_ascii=False)
+        tmp_path = None
+        try:
+            with NamedTemporaryFile('w', delete=False, dir=self._profiles_dir, encoding='utf-8') as tmp:
+                tmp_path = tmp.name
+                json.dump(profile, tmp, indent=2, ensure_ascii=False)
+                tmp.flush()
+                os.fsync(tmp.fileno())
+            os.replace(tmp_path, path)
+        finally:
+            if tmp_path and os.path.exists(tmp_path):
+                try:
+                    os.remove(tmp_path)
+                except OSError:
+                    pass
 
         return filename
 
     def load_profile(self, filename: str) -> Optional[dict]:
         """Load a profile's devices and settings."""
-        path = os.path.join(self._profiles_dir, filename)
-        if not os.path.exists(path):
+        path = self._resolve_profile_path(filename)
+        if path is None or not path.exists():
             return None
-        with open(path, 'r', encoding='utf-8') as f:
-            return json.load(f)
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                return validate_profile_payload(json.load(f))
+        except (json.JSONDecodeError, OSError, ValueError):
+            return None
 
     def delete_profile(self, filename: str) -> bool:
-        path = os.path.join(self._profiles_dir, filename)
-        if os.path.exists(path):
+        path = self._resolve_profile_path(filename)
+        if path is not None and path.exists():
             os.remove(path)
             return True
         return False

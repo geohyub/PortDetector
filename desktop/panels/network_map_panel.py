@@ -546,11 +546,12 @@ class NetworkMapPanel(QWidget):
         self._scan_worker.progress.connect(self._on_scan_progress)
         self._scan_worker.node_found.connect(self._on_node_found)
         self._scan_worker.complete.connect(self._on_scan_complete)
+        self._scan_worker.finished.connect(self._scan_worker.deleteLater)
+        self._scan_worker.finished.connect(lambda worker=self._scan_worker: self._clear_scan_worker(worker))
         self._scan_worker.start()
 
     def _stop_scan(self):
-        if self._scan_worker:
-            self._scan_worker.stop()
+        self._stop_worker("_scan_worker")
 
     def _on_scan_progress(self, scanned, total):
         self._progress.setMaximum(total)
@@ -565,7 +566,6 @@ class NetworkMapPanel(QWidget):
         self._scan_btn.setEnabled(True)
         self._stop_btn.setEnabled(False)
         self._progress.setVisible(False)
-        self._scan_worker = None
 
         count = len(all_nodes)
         if count == 0:
@@ -580,15 +580,15 @@ class NetworkMapPanel(QWidget):
     # ── Monitoring ──
 
     def _start_monitoring(self):
-        if self._ping_worker:
-            self._ping_worker.stop()
-            self._ping_worker.wait(2000)
+        self._stop_worker("_ping_worker")
 
         from desktop.workers.network_map_worker import MapPingWorkerThread
         self._ping_worker = MapPingWorkerThread(interval=10)
         ips = list(self._nodes.keys())
         self._ping_worker.set_ips(ips)
         self._ping_worker.update.connect(self._on_ping_update)
+        self._ping_worker.finished.connect(self._ping_worker.deleteLater)
+        self._ping_worker.finished.connect(lambda worker=self._ping_worker: self._clear_ping_worker(worker))
         self._ping_worker.start()
         self._status_label.setText(t("netmap.monitoring", count=len(ips)))
 
@@ -751,9 +751,37 @@ class NetworkMapPanel(QWidget):
     # ── Cleanup ──
 
     def stop_workers(self):
-        if self._scan_worker:
-            self._scan_worker.stop()
-            self._scan_worker.wait(3000)
-        if self._ping_worker:
-            self._ping_worker.stop()
-            self._ping_worker.wait(3000)
+        self._stop_worker("_scan_worker")
+        self._stop_worker("_ping_worker")
+
+    def _clear_scan_worker(self, worker):
+        if self._scan_worker is worker:
+            self._scan_worker = None
+
+    def _clear_ping_worker(self, worker):
+        if self._ping_worker is worker:
+            self._ping_worker = None
+
+    def _stop_worker(self, worker_attr: str):
+        worker = getattr(self, worker_attr, None)
+        if not worker:
+            return
+
+        stop = getattr(worker, "stop", None)
+        if callable(stop):
+            stop()
+
+        quit_fn = getattr(worker, "quit", None)
+        if callable(quit_fn):
+            quit_fn()
+
+        wait_fn = getattr(worker, "wait", None)
+        if callable(wait_fn):
+            wait_fn(3000)
+
+        if not getattr(worker, "isRunning", lambda: False)():
+            worker.deleteLater()
+            if worker_attr == "_scan_worker":
+                self._clear_scan_worker(worker)
+            else:
+                self._clear_ping_worker(worker)

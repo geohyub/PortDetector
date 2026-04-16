@@ -99,6 +99,61 @@ def test_main_window_creates(app, tmp_path):
     window.deleteLater()
 
 
+def test_ping_worker_keeps_running_when_log_write_fails(app, monkeypatch):
+    """Worker should keep monitoring even if status-change logging fails once."""
+    import threading
+
+    from backend.models.device import Device
+    from desktop.workers import ping_worker as ping_worker_module
+    from desktop.workers.ping_worker import PingWorkerThread
+
+    class _ConfigService:
+        def __init__(self):
+            self._devices = [
+                Device(
+                    id="dev_001",
+                    name="Bridge Monitor",
+                    ip="10.0.0.25",
+                    ports=[22],
+                    category="Network",
+                    importance="standard",
+                    description="Monitoring fixture",
+                    enabled=True,
+                )
+            ]
+
+        def get_enabled_devices(self):
+            return list(self._devices)
+
+    class _LogService:
+        def log_event(self, *args, **kwargs):
+            raise RuntimeError("simulated disk write failure")
+
+    config_service = _ConfigService()
+    log_service = _LogService()
+    worker = PingWorkerThread(config_service, log_service, delay_threshold_ms=200)
+    worker.set_interval(0)
+
+    call_count = {"value": 0}
+
+    def fake_ping(ip):
+        call_count["value"] += 1
+        if call_count["value"] >= 3:
+            worker._running = False
+        if call_count["value"] == 1:
+            return True, 25
+        return True, 450
+
+    monkeypatch.setattr(ping_worker_module, "ping", fake_ping)
+
+    thread = threading.Thread(target=worker.run)
+    thread.start()
+    thread.join(timeout=2)
+
+    assert not thread.is_alive()
+    assert call_count["value"] == 3
+
+
 def test_py_compile():
     """desktop/ 하위 모든 .py 파일이 py_compile 통과하는지 확인."""
     import py_compile

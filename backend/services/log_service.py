@@ -74,15 +74,29 @@ class LogService:
 
     def _read_log_snapshot(self) -> bytes:
         """Read a consistent snapshot of the current log file."""
-        if not os.path.exists(self._log_path):
-            return b""
-
         with self._acquire_log_lock():
-            try:
-                with open(self._log_path, 'rb') as f:
-                    return f.read()
-            except OSError:
+            chunks = []
+            for path in self._log_snapshot_paths():
+                try:
+                    with open(path, 'rb') as f:
+                        chunk = f.read()
+                    if chunk:
+                        chunks.append(chunk)
+                except OSError:
+                    continue
+            if not chunks:
                 return b""
+            return b"\n".join(chunks)
+
+    def _log_snapshot_paths(self) -> list[str]:
+        paths = []
+        for index in range(MAX_LOG_BACKUPS, 0, -1):
+            backup_path = f"{self._log_path}.{index}"
+            if os.path.exists(backup_path):
+                paths.append(backup_path)
+        if os.path.exists(self._log_path):
+            paths.append(self._log_path)
+        return paths
 
     def _sanitize_value(self, key: str, value):
         key_hint = (key or "").strip().lower().replace("-", "_")
